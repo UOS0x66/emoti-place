@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480" width="400" height="480">
+  <defs>
+    <radialGradient id="bgGrandma" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2d1a0a"/>
+      <stop offset="100%" stop-color="#160c04"/>
+    </radialGradient>
+    <radialGradient id="faceGrandma" cx="50%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#f2d4b0"/>
+      <stop offset="60%" stop-color="#d4a878"/>
+      <stop offset="100%" stop-color="#b07848"/>
+    </radialGradient>
+    <radialGradient id="warmGlow" cx="50%" cy="60%" r="50%">
+      <stop offset="0%" stop-color="#e8762a" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#e8762a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grandmaShadow">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <clipPath id="grandmaCircle">
+      <circle cx="200" cy="200" r="185"/>
+    </clipPath>
+    <pattern id="fabricPattern" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#b84a1a"/>
+      <path d="M0,7 Q3.5,3.5 7,7 Q10.5,10.5 14,7" stroke="#d0622a" stroke-width="1" fill="none" opacity="0.45"/>
+      <path d="M7,0 Q10.5,3.5 7,7 Q3.5,10.5 7,14" stroke="#d0622a" stroke-width="0.8" fill="none" opacity="0.25"/>
+    </pattern>
+  </defs>
+
+  <circle cx="200" cy="200" r="195" fill="url(#bgGrandma)" filter="url(#grandmaShadow)"/>
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#e8762a" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="200" cy="200" r="178" fill="none" stroke="#e8762a" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="200" cy="260" r="130" fill="url(#warmGlow)"/>
+
+  <g clip-path="url(#grandmaCircle)">
+
+    <path d="M50 480 Q80 350 130 320 L200 345 L270 320 Q320 350 350 480Z" fill="url(#fabricPattern)"/>
+    <path d="M130 320 Q160 295 200 300 Q240 295 270 320 Q250 305 200 308 Q150 305 130 320Z" fill="#f0e0c8"/>
+    <path d="M190 308 Q193 322 189 336 Q196 332 200 334 Q204 332 211 336 Q207 322 210 308Z" fill="#e0c8a0"/>
+    <path d="M130 320 Q160 295 200 300 Q240 295 270 320" stroke="#c8622a" stroke-width="2" fill="none" opacity="0.5"/>
+
+    <path d="M184 295 Q193 304 200 306 Q207 304 216 295 L214 276 Q208 284 200 286 Q192 284 186 276Z" fill="#b8845a"/>
+
+    <ellipse cx="200" cy="210" rx="50" ry="72" fill="url(#faceGrandma)" filter="url(#grandmaShadow)"/>
+
+    <ellipse cx="141" cy="213" rx="10" ry="13" fill="#b8845a"/>
+    <ellipse cx="143" cy="213" rx="5.5" ry="8" fill="#a07040"/>
+    <ellipse cx="259" cy="213" rx="10" ry="13" fill="#b8845a"/>
+    <ellipse cx="257" cy="213" rx="5.5" ry="8" fill="#a07040"/>
+
+    <path d="M150 190 Q152 130 200 123 Q248 130 250 190 Q241 152 200 146 Q159 152 150 190Z" fill="#d0d0d0"/>
+    <path d="M160 167 Q178 146 200 144" stroke="#e8e8e8" stroke-width="2" fill="none" opacity="0.55"/>
+    <path d="M240 167 Q222 146 200 144" stroke="#e8e8e8" stroke-width="2" fill="none" opacity="0.55"/>
+    <ellipse cx="200" cy="132" rx="22" ry="16" fill="#c0c0c0"/>
+    <ellipse cx="200" cy="129" rx="16" ry="12" fill="#d8d8d8"/>
+    <path d="M186 126 Q200 122 214 126" stroke="#b0b0b0" stroke-width="1" fill="none" opacity="0.5"/>
+
+    <g transform="translate(24,25.2) scale(0.88)">
+
+    <path d="M163 172 Q181 167 197 169" stroke="#a07040" stroke-width="1.1" fill="none" opacity="0.38"/>
+    <path d="M237 172 Q219 167 203 169" stroke="#a07040" stroke-width="1.1" fill="none" opacity="0.38"/>
+    <path d="M165 180 Q182 175 197 177" stroke="#a07040" stroke-width="0.9" fill="none" opacity="0.28"/>
+    <path d="M235 180 Q218 175 203 177" stroke="#a07040" stroke-width="0.9" fill="none" opacity="0.28"/>
+
+    <path d="M194 187 Q194 180 195 173" stroke="#a07040" stroke-width="1.1" fill="none" opacity="0.32"/>
+    <path d="M206 187 Q206 180 205 173" stroke="#a07040" stroke-width="1.1" fill="none" opacity="0.32"/>
+
+    <path d="M164 190 Q175 184 186 187" stroke="#888" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.65"/>
+    <path d="M236 190 Q225 184 214 187" stroke="#888" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.65"/>
+
+    <path d="M164 205 Q175 198 186 205 Q175 212 164 205Z" fill="white"/>
+    <ellipse cx="175" cy="206" rx="6" ry="4" fill="#3d2800"/>
+    <ellipse cx="175" cy="205" rx="2.5" ry="1.8" fill="#6b4010"/>
+    <circle cx="176" cy="204" r="1" fill="white" opacity="0.65"/>
+    <path d="M164 205 Q175 198 186 205" stroke="#a07040" stroke-width="1.2" fill="none" opacity="0.3"/>
+    <path d="M236 205 Q225 198 214 205 Q225 212 236 205Z" fill="white"/>
+    <ellipse cx="225" cy="206" rx="6" ry="4" fill="#3d2800"/>
+    <ellipse cx="225" cy="205" rx="2.5" ry="1.8" fill="#6b4010"/>
+    <circle cx="224" cy="204" r="1" fill="white" opacity="0.65"/>
+    <path d="M236 205 Q225 198 214 205" stroke="#a07040" stroke-width="1.2" fill="none" opacity="0.3"/>
+
+    <path d="M162 204 Q156 201 152 206" stroke="#a07040" stroke-width="1.1" fill="none" opacity="0.42"/>
+    <path d="M162 209 Q156 208 151 212" stroke="#a07040" stroke-width="0.9" fill="none" opacity="0.35"/>
+    <path d="M162 214 Q156 214 152 217" stroke="#a07040" stroke-width="0.8" fill="none" opacity="0.28"/>
+    <path d="M238 204 Q244 201 248 206" stroke="#a07040" stroke-width="1.1" fill="none" opacity="0.42"/>
+    <path d="M238 209 Q244 208 249 212" stroke="#a07040" stroke-width="0.9" fill="none" opacity="0.35"/>
+    <path d="M238 214 Q244 214 248 217" stroke="#a07040" stroke-width="0.8" fill="none" opacity="0.28"/>
+
+    <path d="M196 217 Q193 229 191 233 Q196 237 200 236 Q204 237 209 233 Q207 229 204 217" fill="none" stroke="#a07040" stroke-width="1.4" opacity="0.55"/>
+    <ellipse cx="200" cy="233" rx="10" ry="4" fill="#b8845a" opacity="0.15"/>
+
+    <path d="M182 256 Q200 257 218 256" stroke="#8b5020" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+
+    <path d="M162 258 Q172 256 181 257" stroke="#a07040" stroke-width="1" fill="none" opacity="0.36"/>
+    <path d="M162 263 Q172 261 180 262" stroke="#a07040" stroke-width="0.8" fill="none" opacity="0.26"/>
+    <path d="M238 258 Q228 256 219 257" stroke="#a07040" stroke-width="1" fill="none" opacity="0.36"/>
+    <path d="M238 263 Q228 261 220 262" stroke="#a07040" stroke-width="0.8" fill="none" opacity="0.26"/>
+
+    </g>
+
+    <path d="M186 282 Q200 278 214 282" stroke="#a07040" stroke-width="0.8" fill="none" opacity="0.22"/>
+    <path d="M188 288 Q200 285 212 288" stroke="#a07040" stroke-width="0.7" fill="none" opacity="0.18"/>
+
+  </g>
+
+  <rect x="100" y="395" width="200" height="50" rx="8" fill="#160c04" stroke="#e8762a" stroke-width="1.5" opacity="0.95"/>
+  <text x="200" y="415" font-family="Georgia, serif" font-size="10" fill="#e8a060" text-anchor="middle" letter-spacing="3" opacity="0.7">PERSONA 03</text>
+  <text x="200" y="436" font-family="Georgia, serif" font-size="13" fill="#e8a060" text-anchor="middle" font-weight="bold" letter-spacing="1">푸근한 욕쟁이 할멈</text>
+
+  <path d="M20 20 Q20 45 35 40 Q25 25 45 20Z" fill="#e8762a" opacity="0.22"/>
+  <path d="M380 20 Q380 45 365 40 Q375 25 355 20Z" fill="#e8762a" opacity="0.22"/>
+  <path d="M20 460 Q20 435 35 440 Q25 455 45 460Z" fill="#e8762a" opacity="0.22"/>
+  <path d="M380 460 Q380 435 365 440 Q375 455 355 460Z" fill="#e8762a" opacity="0.22"/>
+  <circle cx="15" cy="15" r="3" fill="#e8762a" opacity="0.3"/>
+  <circle cx="385" cy="15" r="3" fill="#e8762a" opacity="0.3"/>
+  <circle cx="15" cy="465" r="3" fill="#e8762a" opacity="0.3"/>
+  <circle cx="385" cy="465" r="3" fill="#e8762a" opacity="0.3"/>
+</svg>

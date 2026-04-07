@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480" width="400" height="480">
+  <defs>
+    <radialGradient id="bgRobot" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#050f1a"/>
+      <stop offset="100%" stop-color="#020810"/>
+    </radialGradient>
+    <radialGradient id="bodyGrad" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#8ab4c8"/>
+      <stop offset="60%" stop-color="#4a7a9b"/>
+      <stop offset="100%" stop-color="#2a4a60"/>
+    </radialGradient>
+    <radialGradient id="screenGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00e5ff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#003344" stop-opacity="0.9"/>
+    </radialGradient>
+    <linearGradient id="chrome" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c8dde8"/>
+      <stop offset="40%" stop-color="#6a9ab0"/>
+      <stop offset="100%" stop-color="#2a4a60"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a3a52"/>
+      <stop offset="100%" stop-color="#0a1e2c"/>
+    </linearGradient>
+    <filter id="robotGlow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softShadow">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+    <clipPath id="robotCircle">
+      <circle cx="200" cy="200" r="185"/>
+    </clipPath>
+  </defs>
+
+  <circle cx="200" cy="200" r="195" fill="url(#bgRobot)" filter="url(#softShadow)"/>
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#00e5ff" stroke-width="1" opacity="0.3"/>
+  <circle cx="200" cy="200" r="180" fill="none" stroke="#00e5ff" stroke-width="0.5" opacity="0.15"/>
+
+  <g clip-path="url(#robotCircle)" opacity="0.07">
+    <line x1="50" y1="0" x2="50" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="100" y1="0" x2="100" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="150" y1="0" x2="150" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="200" y1="0" x2="200" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="250" y1="0" x2="250" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="300" y1="0" x2="300" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="350" y1="0" x2="350" y2="400" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="50" x2="400" y2="50" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="100" x2="400" y2="100" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="150" x2="400" y2="150" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="200" x2="400" y2="200" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="250" x2="400" y2="250" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="300" x2="400" y2="300" stroke="#00e5ff" stroke-width="0.5"/>
+    <line x1="0" y1="350" x2="400" y2="350" stroke="#00e5ff" stroke-width="0.5"/>
+  </g>
+
+  <g clip-path="url(#robotCircle)">
+    <rect x="120" y="315" width="160" height="120" rx="12" fill="url(#chrome)"/>
+    <rect x="128" y="323" width="144" height="104" rx="8" fill="url(#panel)"/>
+
+    <rect x="140" y="333" width="50" height="30" rx="4" fill="#0a2030" stroke="#00e5ff" stroke-width="0.8" opacity="0.8"/>
+    <polyline points="143,348 147,340 151,352 155,344 159,350 163,342 167,350 171,345 175,350 179,342 183,348" stroke="#00e5ff" stroke-width="1.2" fill="none" opacity="0.7"/>
+
+    <circle cx="215" cy="338" r="5" fill="#00ff88" opacity="0.9" filter="url(#robotGlow)"/>
+    <circle cx="230" cy="338" r="5" fill="#00e5ff" opacity="0.9" filter="url(#robotGlow)"/>
+    <circle cx="245" cy="338" r="5" fill="#0088ff" opacity="0.9" filter="url(#robotGlow)"/>
+
+    <rect x="140" y="370" width="120" height="4" rx="2" fill="#0a2030" stroke="#00e5ff" stroke-width="0.5"/>
+    <rect x="140" y="370" width="85" height="4" rx="2" fill="#00e5ff" opacity="0.7"/>
+    <rect x="140" y="380" width="120" height="4" rx="2" fill="#0a2030" stroke="#00e5ff" stroke-width="0.5"/>
+    <rect x="140" y="380" width="50" height="4" rx="2" fill="#00e5ff" opacity="0.5"/>
+
+    <rect x="180" y="295" width="40" height="25" rx="5" fill="url(#chrome)"/>
+    <rect x="183" y="298" width="34" height="19" rx="3" fill="#1a3a52"/>
+    <circle cx="187" cy="303" r="3" fill="#6a9ab0"/>
+    <circle cx="213" cy="303" r="3" fill="#6a9ab0"/>
+
+    <ellipse cx="118" cy="325" rx="28" ry="18" fill="url(#chrome)"/>
+    <ellipse cx="282" cy="325" rx="28" ry="18" fill="url(#chrome)"/>
+    <circle cx="100" cy="322" r="5" fill="#6a9ab0" stroke="#8ab4c8" stroke-width="1"/>
+    <circle cx="300" cy="322" r="5" fill="#6a9ab0" stroke="#8ab4c8" stroke-width="1"/>
+
+    <rect x="135" y="155" width="130" height="140" rx="18" fill="url(#chrome)" filter="url(#softShadow)"/>
+    <rect x="140" y="160" width="120" height="130" rx="14" fill="#0a1e2c"/>
+
+    <rect x="196" y="130" width="8" height="30" rx="4" fill="url(#chrome)"/>
+    <circle cx="200" cy="125" r="10" fill="#00e5ff" opacity="0.9" filter="url(#robotGlow)"/>
+    <circle cx="200" cy="125" r="6" fill="white" opacity="0.8"/>
+
+    <rect x="118" y="185" width="18" height="35" rx="5" fill="url(#chrome)"/>
+    <rect x="121" y="190" width="12" height="10" rx="2" fill="#00e5ff" opacity="0.5" filter="url(#robotGlow)"/>
+    <rect x="264" y="185" width="18" height="35" rx="5" fill="url(#chrome)"/>
+    <rect x="267" y="190" width="12" height="10" rx="2" fill="#00e5ff" opacity="0.5" filter="url(#robotGlow)"/>
+
+    <rect x="150" y="168" width="100" height="115" rx="10" fill="url(#screenGrad)" stroke="#00e5ff" stroke-width="1" opacity="0.9"/>
+
+    <rect x="158" y="185" width="34" height="20" rx="5" fill="#001a26"/>
+    <rect x="160" y="187" width="30" height="16" rx="3" fill="#00e5ff" opacity="0.8" filter="url(#robotGlow)"/>
+    <rect x="160" y="193" width="30" height="2" rx="1" fill="white" opacity="0.6"/>
+
+    <rect x="208" y="185" width="34" height="20" rx="5" fill="#001a26"/>
+    <rect x="210" y="187" width="30" height="16" rx="3" fill="#00e5ff" opacity="0.8" filter="url(#robotGlow)"/>
+    <rect x="210" y="193" width="30" height="2" rx="1" fill="white" opacity="0.6"/>
+
+    <circle cx="200" cy="220" r="4" fill="#00e5ff" opacity="0.5"/>
+    <circle cx="200" cy="220" r="2" fill="#00ffff" opacity="0.8"/>
+
+    <rect x="158" y="238" width="84" height="16" rx="4" fill="#001a26" stroke="#00e5ff" stroke-width="0.8" opacity="0.8"/>
+    <text x="200" y="250" font-family="Courier New, monospace" font-size="7" fill="#00e5ff" text-anchor="middle" opacity="0.8">10110100 0110</text>
+
+    <rect x="150" y="168" width="100" height="115" rx="10" fill="none" stroke="#00e5ff" stroke-width="0.3" opacity="0.2"/>
+    <line x1="150" y1="182" x2="250" y2="182" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="196" x2="250" y2="196" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="210" x2="250" y2="210" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="224" x2="250" y2="224" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="238" x2="250" y2="238" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="252" x2="250" y2="252" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="266" x2="250" y2="266" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+    <line x1="150" y1="280" x2="250" y2="280" stroke="#00e5ff" stroke-width="0.3" opacity="0.1"/>
+
+    <circle cx="148" cy="168" r="5" fill="#6a9ab0" stroke="#8ab4c8" stroke-width="0.8"/>
+    <circle cx="252" cy="168" r="5" fill="#6a9ab0" stroke="#8ab4c8" stroke-width="0.8"/>
+    <circle cx="148" cy="282" r="5" fill="#6a9ab0" stroke="#8ab4c8" stroke-width="0.8"/>
+    <circle cx="252" cy="282" r="5" fill="#6a9ab0" stroke="#8ab4c8" stroke-width="0.8"/>
+  </g>
+
+  <rect x="100" y="395" width="200" height="50" rx="8" fill="#020810" stroke="#00e5ff" stroke-width="1" opacity="0.95"/>
+  <text x="200" y="415" font-family="Courier New, monospace" font-size="9" fill="#00e5ff" text-anchor="middle" letter-spacing="3" opacity="0.6">PERSONA 02</text>
+  <text x="200" y="436" font-family="Courier New, monospace" font-size="12" fill="#00e5ff" text-anchor="middle" font-weight="bold" letter-spacing="1">냉철한 논리 로봇</text>
+
+  <path d="M15 15 L15 50 L22 50 M15 15 L50 15 L50 22" stroke="#00e5ff" stroke-width="1" fill="none" opacity="0.35"/>
+  <path d="M385 15 L385 50 L378 50 M385 15 L350 15 L350 22" stroke="#00e5ff" stroke-width="1" fill="none" opacity="0.35"/>
+  <path d="M15 465 L15 430 L22 430 M15 465 L50 465 L50 458" stroke="#00e5ff" stroke-width="1" fill="none" opacity="0.35"/>
+  <path d="M385 465 L385 430 L378 430 M385 465 L350 465 L350 458" stroke="#00e5ff" stroke-width="1" fill="none" opacity="0.35"/>
+
+  <circle cx="50" cy="150" r="2" fill="#00e5ff" opacity="0.4"/>
+  <circle cx="55" cy="165" r="1.5" fill="#00e5ff" opacity="0.3"/>
+  <circle cx="345" cy="200" r="2" fill="#00e5ff" opacity="0.4"/>
+  <circle cx="355" cy="185" r="1.5" fill="#00e5ff" opacity="0.3"/>
+</svg>
