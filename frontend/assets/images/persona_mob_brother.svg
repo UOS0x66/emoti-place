@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480" width="400" height="480">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
     <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#2a1a0e"/>
+      <stop offset="0%" stop-color="#0d0a06"/>
       <stop offset="100%" stop-color="#0d0a06"/>
     </radialGradient>
     <radialGradient id="faceGrad" cx="50%" cy="40%" r="55%">
@@ -16,13 +16,13 @@
     </clipPath>
   </defs>
 
-  <circle cx="200" cy="200" r="195" fill="url(#bgGrad)" filter="url(#shadow)"/>
+  <circle cx="200" cy="200" r="195" fill="url(#bgGrad)"/>
   <circle cx="200" cy="200" r="185" fill="none" stroke="#c8a020" stroke-width="2" opacity="0.6"/>
   <circle cx="200" cy="200" r="178" fill="none" stroke="#c8a020" stroke-width="0.5" opacity="0.3"/>
 
   <g clip-path="url(#circleClip)">
     <!-- Body - dark plain turtleneck -->
-    <path d="M55 480 Q75 340 138 312 L200 332 L262 312 Q325 340 345 480Z" fill="#1c1c1c"/>
+    <path d="M55 480 Q75 340 138 312 L200 332 L262 312 Q325 340 345 480Z" fill="#373544"/>
     <!-- Turtleneck collar -->
     <path d="M174 292 Q186 308 200 311 Q214 308 226 292 L224 272 Q213 285 200 287 Q187 285 176 272Z" fill="#222222"/>
     <path d="M175 288 Q188 297 200 299 Q212 297 225 288" stroke="#333" stroke-width="1.5" fill="none" opacity="0.5"/>
@@ -31,7 +31,7 @@
     <path d="M178 290 Q190 300 200 302 Q210 300 222 290 L220 268 Q210 278 200 280 Q190 278 180 268Z" fill="#d4935e"/>
 
     <!-- Head -->
-    <ellipse cx="200" cy="210" rx="72" ry="80" fill="url(#faceGrad)" filter="url(#shadow)"/>
+    <ellipse cx="200" cy="210" rx="72" ry="80" fill="url(#faceGrad)"/>
 
     <!-- Ears (no earring) -->
     <ellipse cx="130" cy="215" rx="14" ry="18" fill="#c8915a"/>
@@ -40,7 +40,7 @@
     <ellipse cx="268" cy="215" rx="8" ry="12" fill="#b87040"/>
 
     <!-- Hair - slicked back -->
-    <path d="M128 195 Q130 130 200 125 Q270 130 272 195 Q260 155 200 150 Q140 155 128 195Z" fill="#1a0a00"/>
+    <path d="M128 195 Q130 130 200 125 Q270 130 272 195 Q260 155 200 150 Q140 155 128 195Z" fill="#2d1a0a"/>
     <path d="M145 165 Q170 145 200 143 Q165 148 145 165Z" fill="#3a1a00" opacity="0.5"/>
     <path d="M155 158 Q175 145 195 143" stroke="#5a2a00" stroke-width="2" fill="none" opacity="0.4"/>
 
@@ -85,12 +85,6 @@
     <ellipse cx="200" cy="268" rx="36" ry="8" fill="#a06030" opacity="0.22"/>
   </g>
 
-  <rect x="105" y="395" width="190" height="50" rx="8" fill="#0d0a06" stroke="#c8a020" stroke-width="1.5" opacity="0.95"/>
-  <text x="200" y="415" font-family="Georgia, serif" font-size="11" fill="#f5c842" text-anchor="middle" letter-spacing="3" opacity="0.7">PERSONA 01</text>
-  <text x="200" y="436" font-family="Georgia, serif" font-size="14" fill="#f5c842" text-anchor="middle" font-weight="bold" letter-spacing="1">의리 있는 조폭 동생</text>
-
-  <path d="M15 15 L15 45 M15 15 L45 15" stroke="#c8a020" stroke-width="1.5" fill="none" opacity="0.4"/>
-  <path d="M385 15 L385 45 M385 15 L355 15" stroke="#c8a020" stroke-width="1.5" fill="none" opacity="0.4"/>
   <path d="M15 465 L15 435 M15 465 L45 465" stroke="#c8a020" stroke-width="1.5" fill="none" opacity="0.4"/>
   <path d="M385 465 L385 435 M385 465 L355 465" stroke="#c8a020" stroke-width="1.5" fill="none" opacity="0.4"/>
 </svg>
