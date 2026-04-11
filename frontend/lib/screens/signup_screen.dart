@@ -8,7 +8,6 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  final _idController = TextEditingController();
   final _emailController = TextEditingController();
   final _nicknameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -18,7 +17,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _idController.dispose();
     _emailController.dispose();
     _nicknameController.dispose();
     _passwordController.dispose();
@@ -56,17 +54,6 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // 아이디
-                TextField(
-                  controller: _idController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDecoration(
-                    hint: '아이디',
-                    icon: Icons.person_outline,
-                  ),
-                ),
-                const SizedBox(height: 16),
 
                 // 이메일
                 TextField(

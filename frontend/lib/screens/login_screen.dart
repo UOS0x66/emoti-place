@@ -73,9 +73,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _idController,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: '아이디',
+                    hintText: '이메일',
                     hintStyle: const TextStyle(color: Color(0xFF666666)),
-                    prefixIcon: const Icon(Icons.person_outline, color: Color(0xFF666666)),
+                    prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF666666)),
                     filled: true,
                     fillColor: const Color(0xFF1E1E1E),
                     border: OutlineInputBorder(
