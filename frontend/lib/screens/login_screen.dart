@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'persona_selection_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -150,7 +151,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // 회원가입 버튼
                 TextButton(
                   onPressed: () {
-                    // TODO: 회원가입 화면으로 이동
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SignupScreen(),
+                      ),
+                    );
                   },
                   child: const Text(
                     '계정이 없으신가요? 회원가입',
