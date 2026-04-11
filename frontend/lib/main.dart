@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'screens/splash_screen.dart';
+import 'screens/permission_screen.dart';
 
-void main() {
-  runApp(const EmotiPlaceApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final locationStatus = await Permission.location.status;
+
+  runApp(EmotiPlaceApp(locationGranted: locationStatus.isGranted));
 }
 
 class EmotiPlaceApp extends StatelessWidget {
-  const EmotiPlaceApp({super.key});
+  final bool locationGranted;
+
+  const EmotiPlaceApp({super.key, required this.locationGranted});
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +25,7 @@ class EmotiPlaceApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF6B35)),
         fontFamily: 'Pretendard',
       ),
-      home: const SplashScreen(),
+      home: locationGranted ? const SplashScreen() : const PermissionScreen(),
     );
   }
 }
