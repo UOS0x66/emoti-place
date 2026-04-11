@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'chat_screen.dart';
 
 class PersonaSelectionScreen extends StatelessWidget {
   const PersonaSelectionScreen({super.key});
@@ -155,7 +156,15 @@ class _PersonaCard extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // TODO: 채팅 화면으로 이동
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          personaName: persona.name,
+                          personaAsset: persona.asset,
+                          accentColor: persona.accentColor,
+                        ),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: persona.accentColor,
