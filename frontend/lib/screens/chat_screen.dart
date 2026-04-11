@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../widgets/place_card.dart';
 
 class ChatScreen extends StatefulWidget {
   final String personaName;
@@ -58,8 +59,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // TODO: 백엔드 LLM API 호출 후 응답 받기
     Future.delayed(const Duration(milliseconds: 800), () {
-      _addPersonaMessage(_getMockResponse());
+      _addMockResponse();
     });
+  }
+
+  void _addMockResponse() {
+    // 3번째 사용자 메시지마다 장소 추천 카드 포함
+    final userMessageCount = _messages.where((m) => m.isUser).length;
+
+    if (userMessageCount % 3 == 0) {
+      _addPersonaMessage(_getRecommendText());
+      setState(() {
+        _messages.add(_ChatMessage(
+          text: '',
+          isUser: false,
+          place: _getMockPlace(),
+        ));
+      });
+      _scrollToBottom();
+    } else {
+      _addPersonaMessage(_getMockResponse());
+    }
   }
 
   String _getMockResponse() {
@@ -70,6 +90,29 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       return '아이고, 그런 일이 있었구나. 할미가 다 들어줄께.';
     }
+  }
+
+  String _getRecommendText() {
+    if (widget.personaName.contains('조폭')) {
+      return '행님, 제가 좋은 데 알아왔습니다! 한번 가보십쇼.';
+    } else if (widget.personaName.contains('로봇')) {
+      return '분석 완료. 감정 벡터 매칭 결과, 최적 장소 1건 도출.';
+    } else {
+      return '아가, 할미가 딱 좋은 데 알어. 여기 가봐라.';
+    }
+  }
+
+  _PlaceData _getMockPlace() {
+    return const _PlaceData(
+      name: '숲속 쉼터 카페',
+      category: '카페',
+      address: '서울특별시 성동구 서울숲2길 32-8',
+      atmosphereText: '조용하고 따뜻한 분위기, 혼자 오기 좋은 곳',
+      operatingHours: '09:00 - 22:00',
+      maxGroupSize: 4,
+      isOutdoor: false,
+      personaReason: '지친 마음을 달래기에 딱 좋은 공간입니다.',
+    );
   }
 
   void _scrollToBottom() {
@@ -137,6 +180,25 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
+                if (message.place != null) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: PlaceCard(
+                      name: message.place!.name,
+                      category: message.place!.category,
+                      address: message.place!.address,
+                      atmosphereText: message.place!.atmosphereText,
+                      operatingHours: message.place!.operatingHours,
+                      maxGroupSize: message.place!.maxGroupSize,
+                      isOutdoor: message.place!.isOutdoor,
+                      personaReason: message.place!.personaReason,
+                      accentColor: widget.accentColor,
+                      onMapTap: () {
+                        // TODO: 지도 화면으로 이동
+                      },
+                    ),
+                  );
+                }
                 return _MessageBubble(
                   message: message,
                   accentColor: widget.accentColor,
@@ -199,11 +261,34 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+class _PlaceData {
+  final String name;
+  final String category;
+  final String address;
+  final String? atmosphereText;
+  final String? operatingHours;
+  final int? maxGroupSize;
+  final bool isOutdoor;
+  final String? personaReason;
+
+  const _PlaceData({
+    required this.name,
+    required this.category,
+    required this.address,
+    this.atmosphereText,
+    this.operatingHours,
+    this.maxGroupSize,
+    this.isOutdoor = false,
+    this.personaReason,
+  });
+}
+
 class _ChatMessage {
   final String text;
   final bool isUser;
+  final _PlaceData? place;
 
-  const _ChatMessage({required this.text, required this.isUser});
+  const _ChatMessage({required this.text, required this.isUser, this.place});
 }
 
 class _MessageBubble extends StatelessWidget {
