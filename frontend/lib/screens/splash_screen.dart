@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'persona_selection_screen.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -47,7 +47,7 @@ class _SplashScreenState extends State<SplashScreen>
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => const PersonaSelectionScreen(),
+            builder: (_) => const LoginScreen(),
           ),
         );
       }
