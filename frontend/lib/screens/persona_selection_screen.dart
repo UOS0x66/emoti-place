@@ -156,6 +156,7 @@ class _PersonaCard extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
+                    // TODO: 세션 생성 API 호출 (user_id + persona_id)
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(
