@@ -37,6 +37,8 @@ dependencies:
   flutter_svg: ^2.2.4
   geolocator: ^14.0.2
   permission_handler: ^12.0.1
+  flutter_naver_map: ^1.4.4
+  flutter_dotenv: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +64,7 @@ flutter:
 
   assets:
     - assets/images/
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../widgets/place_card.dart';
+import 'map_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String personaName;
@@ -107,6 +108,8 @@ class _ChatScreenState extends State<ChatScreen> {
       name: '숲속 쉼터 카페',
       category: '카페',
       address: '서울특별시 성동구 서울숲2길 32-8',
+      lat: 37.5445,
+      lng: 127.0374,
       atmosphereText: '조용하고 따뜻한 분위기, 혼자 오기 좋은 곳',
       operatingHours: '09:00 - 22:00',
       maxGroupSize: 4,
@@ -194,7 +197,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       personaReason: message.place!.personaReason,
                       accentColor: widget.accentColor,
                       onMapTap: () {
-                        // TODO: 지도 화면으로 이동
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => MapScreen(
+                              placeName: message.place!.name,
+                              address: message.place!.address,
+                              lat: message.place!.lat,
+                              lng: message.place!.lng,
+                            ),
+                          ),
+                        );
                       },
                     ),
                   );
@@ -265,6 +277,8 @@ class _PlaceData {
   final String name;
   final String category;
   final String address;
+  final double lat;
+  final double lng;
   final String? atmosphereText;
   final String? operatingHours;
   final int? maxGroupSize;
@@ -275,6 +289,8 @@ class _PlaceData {
     required this.name,
     required this.category,
     required this.address,
+    required this.lat,
+    required this.lng,
     this.atmosphereText,
     this.operatingHours,
     this.maxGroupSize,
