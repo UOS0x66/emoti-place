@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../services/auth_storage.dart';
 import 'login_screen.dart';
+import 'persona_selection_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -43,15 +45,25 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => const LoginScreen(),
-          ),
-        );
-      }
-    });
+    _navigateAfterDelay();
+  }
+
+  Future<void> _navigateAfterDelay() async {
+    // 스플래시 애니메이션과 토큰 확인을 병렬로 진행
+    final results = await Future.wait([
+      Future.delayed(const Duration(seconds: 3)),
+      AuthStorage.getToken(),
+    ]);
+    if (!mounted) return;
+
+    final token = results[1] as String?;
+    final next = (token != null && token.isNotEmpty)
+        ? const PersonaSelectionScreen()
+        : const LoginScreen();
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => next),
+    );
   }
 
   @override

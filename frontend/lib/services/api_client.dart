@@ -50,6 +50,12 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decoded;
     }
+    // 인증 만료/실패 시 저장된 토큰을 정리한다.
+    // 화면 전환은 호출 측에서 ApiException을 받고 처리하거나,
+    // 앱 루트에서 전역 리스너로 감지한다.
+    if (response.statusCode == 401) {
+      AuthStorage.clear();
+    }
     final errorMessage = decoded is Map && decoded['error'] != null
         ? decoded['error'] as String
         : '요청에 실패했습니다. (${response.statusCode})';

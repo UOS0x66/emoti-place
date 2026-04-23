@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../services/api_client.dart';
 import '../services/session_service.dart';
 import 'chat_screen.dart';
+import 'login_screen.dart';
 
 class PersonaSelectionScreen extends StatelessWidget {
   const PersonaSelectionScreen({super.key});
@@ -127,6 +128,13 @@ class _PersonaCard extends StatelessWidget {
     } on ApiException catch (e) {
       if (!context.mounted) return;
       Navigator.of(context).pop();
+      if (e.statusCode == 401) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (_) => false,
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message), backgroundColor: const Color(0xFF333333)),
       );
