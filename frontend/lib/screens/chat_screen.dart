@@ -47,7 +47,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _recommending = false;
 
-  Future<void> _requestRecommendation() async {
+  Future<void> _requestRecommendation({bool refresh = false}) async {
     if (_recommending) return;
     setState(() => _recommending = true);
 
@@ -58,11 +58,17 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
 
-      final places = await RecommendService.fetch(
-        sessionId: widget.sessionId,
-        lat: position.latitude,
-        lng: position.longitude,
-      );
+      final places = refresh
+          ? await RecommendService.refresh(
+              sessionId: widget.sessionId,
+              lat: position.latitude,
+              lng: position.longitude,
+            )
+          : await RecommendService.fetch(
+              sessionId: widget.sessionId,
+              lat: position.latitude,
+              lng: position.longitude,
+            );
 
       if (!mounted) return;
       if (places.isEmpty) {
@@ -76,9 +82,17 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       setState(() {
+        // 기존 refresh 트리거 제거
+        _messages.removeWhere((m) => m.isRefreshTrigger);
         for (final place in places) {
           _messages.add(_ChatMessage(text: '', isUser: false, place: place));
         }
+        // 새 refresh 트리거 추가
+        _messages.add(const _ChatMessage(
+          text: '',
+          isUser: false,
+          isRefreshTrigger: true,
+        ));
       });
       _scrollToBottom();
     } catch (e) {
@@ -219,6 +233,44 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
+                if (message.isRefreshTrigger) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: OutlinedButton.icon(
+                        onPressed: _recommending
+                            ? null
+                            : () => _requestRecommendation(refresh: true),
+                        icon: _recommending
+                            ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: widget.accentColor,
+                                ),
+                              )
+                            : Icon(Icons.refresh, size: 18, color: widget.accentColor),
+                        label: Text(
+                          '다른 장소 추천 받기',
+                          style: TextStyle(color: widget.accentColor),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: widget.accentColor.withValues(alpha: 0.5),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
                 if (message.place != null) {
                   final place = message.place!;
                   return Align(
@@ -314,8 +366,14 @@ class _ChatMessage {
   final String text;
   final bool isUser;
   final RecommendedPlace? place;
+  final bool isRefreshTrigger;
 
-  const _ChatMessage({required this.text, required this.isUser, this.place});
+  const _ChatMessage({
+    required this.text,
+    required this.isUser,
+    this.place,
+    this.isRefreshTrigger = false,
+  });
 }
 
 class _MessageBubble extends StatelessWidget {

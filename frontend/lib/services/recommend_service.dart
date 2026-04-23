@@ -82,4 +82,18 @@ class RecommendService {
     final list = (result['places'] as List).cast<Map<String, dynamic>>();
     return list.map(RecommendedPlace.fromJson).toList();
   }
+
+  /// 같은 세션에 대해 다음 배치의 추천 장소를 받아온다.
+  ///
+  /// 현재 백엔드에 정식 `/api/recommend/refresh`가 구현되기 전까지는
+  /// `/api/recommend`를 재호출하여 임시 대응한다. 감정/처방은 세션에 캐시되어
+  /// 있으므로 Stage 3(벡터 검색 + 필터)만 재실행되어 결과가 달라질 수 있다.
+  static Future<List<RecommendedPlace>> refresh({
+    required String sessionId,
+    required double lat,
+    required double lng,
+  }) async {
+    // TODO: 백엔드에 POST /api/recommend/refresh 구현 후 교체
+    return fetch(sessionId: sessionId, lat: lat, lng: lng);
+  }
 }
