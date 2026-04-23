@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'auth_storage.dart';
@@ -29,20 +30,36 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool withAuth = false,
   }) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl$path'),
-      headers: await _headers(withAuth: withAuth),
-      body: body != null ? jsonEncode(body) : null,
-    );
-    return _handleResponse(response);
+    final url = '$_baseUrl$path';
+    developer.log('POST $url body=$body', name: 'ApiClient');
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: await _headers(withAuth: withAuth),
+        body: body != null ? jsonEncode(body) : null,
+      );
+      developer.log('POST $url -> ${response.statusCode}', name: 'ApiClient');
+      return _handleResponse(response);
+    } catch (e, st) {
+      developer.log('POST $url FAILED: $e', name: 'ApiClient', error: e, stackTrace: st);
+      rethrow;
+    }
   }
 
   static Future<dynamic> get(String path, {bool withAuth = false}) async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl$path'),
-      headers: await _headers(withAuth: withAuth),
-    );
-    return _handleResponse(response);
+    final url = '$_baseUrl$path';
+    developer.log('GET $url', name: 'ApiClient');
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _headers(withAuth: withAuth),
+      );
+      developer.log('GET $url -> ${response.statusCode}', name: 'ApiClient');
+      return _handleResponse(response);
+    } catch (e, st) {
+      developer.log('GET $url FAILED: $e', name: 'ApiClient', error: e, stackTrace: st);
+      rethrow;
+    }
   }
 
   static dynamic _handleResponse(http.Response response) {

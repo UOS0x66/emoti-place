@@ -43,8 +43,6 @@ class MapScreen extends StatelessWidget {
                 locationButtonEnable: true,
               ),
               onMapReady: (controller) {
-                controller.setLocationTrackingMode(NLocationTrackingMode.noFollow);
-                controller.getLocationOverlay().setIsVisible(true);
                 controller.addOverlay(
                   NMarker(
                     id: 'place_marker',

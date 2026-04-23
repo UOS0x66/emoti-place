@@ -7,12 +7,12 @@ class AuthStorage {
 
   static Future<void> save({
     required String token,
-    required int userId,
+    required String userId,
     required String nickname,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
-    await prefs.setInt(_userIdKey, userId);
+    await prefs.setString(_userIdKey, userId);
     await prefs.setString(_nicknameKey, nickname);
   }
 
@@ -21,9 +21,9 @@ class AuthStorage {
     return prefs.getString(_tokenKey);
   }
 
-  static Future<int?> getUserId() async {
+  static Future<String?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_userIdKey);
+    return prefs.getString(_userIdKey);
   }
 
   static Future<String?> getNickname() async {

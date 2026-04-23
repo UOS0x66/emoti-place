@@ -13,7 +13,7 @@ class AuthService {
     );
     await AuthStorage.save(
       token: result['token'] as String,
-      userId: result['user_id'] as int,
+      userId: result['user_id'].toString(),
       nickname: result['nickname'] as String,
     );
   }
@@ -28,7 +28,7 @@ class AuthService {
     );
     await AuthStorage.save(
       token: result['token'] as String,
-      userId: result['user_id'] as int,
+      userId: result['user_id'].toString(),
       nickname: result['nickname'] as String,
     );
   }
