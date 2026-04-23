@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:geolocator/geolocator.dart';
+import '../services/chat_service.dart';
+import '../services/recommend_service.dart';
 import '../widgets/place_card.dart';
 import 'map_screen.dart';
 
 class ChatScreen extends StatefulWidget {
+  final String sessionId;
+  final String greetingMessage;
   final String personaName;
   final String personaAsset;
   final Color accentColor;
 
   const ChatScreen({
     super.key,
+    required this.sessionId,
+    required this.greetingMessage,
     required this.personaName,
     required this.personaAsset,
     required this.accentColor,
@@ -27,18 +34,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // 페르소나 첫 인사
-    _addPersonaMessage(_getGreeting());
-  }
-
-  String _getGreeting() {
-    if (widget.personaName.contains('조폭')) {
-      return '정성을 다해 모시겠습니다, 행님!';
-    } else if (widget.personaName.contains('로봇')) {
-      return '시스템 준비 완료, 당신 이야기, 수신 대기';
-    } else {
-      return '아가, 힘든 일있으믄 할미한테 속시원히 털어나';
-    }
+    _addPersonaMessage(widget.greetingMessage);
   }
 
   void _addPersonaMessage(String text) {
@@ -48,74 +44,98 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
-  void _sendMessage() {
+  bool _sending = false;
+  bool _recommending = false;
+
+  Future<void> _requestRecommendation() async {
+    if (_recommending) return;
+    setState(() => _recommending = true);
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      final places = await RecommendService.fetch(
+        sessionId: widget.sessionId,
+        lat: position.latitude,
+        lng: position.longitude,
+      );
+
+      if (!mounted) return;
+      if (places.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('추천할 장소를 찾지 못했습니다.'),
+            backgroundColor: Color(0xFF333333),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        for (final place in places) {
+          _messages.add(_ChatMessage(text: '', isUser: false, place: place));
+        }
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('추천 요청 실패: ${e.toString()}'),
+          backgroundColor: const Color(0xFF333333),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _recommending = false);
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    if (_sending) return;
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
     setState(() {
       _messages.add(_ChatMessage(text: text, isUser: true));
+      // 빈 페르소나 메시지를 먼저 추가하고, 스트림 토큰으로 채운다
+      _messages.add(const _ChatMessage(text: '', isUser: false));
+      _sending = true;
     });
     _messageController.clear();
     _scrollToBottom();
 
-    // TODO: 백엔드 LLM API 호출 후 응답 받기
-    Future.delayed(const Duration(milliseconds: 800), () {
-      _addMockResponse();
-    });
-  }
+    final streamingIndex = _messages.length - 1;
+    final buffer = StringBuffer();
 
-  void _addMockResponse() {
-    // 3번째 사용자 메시지마다 장소 추천 카드 포함
-    final userMessageCount = _messages.where((m) => m.isUser).length;
-
-    if (userMessageCount % 3 == 0) {
-      _addPersonaMessage(_getRecommendText());
+    try {
+      final stream = ChatService.streamMessage(
+        sessionId: widget.sessionId,
+        message: text,
+      );
+      await for (final token in stream) {
+        buffer.write(token);
+        setState(() {
+          _messages[streamingIndex] = _ChatMessage(
+            text: buffer.toString(),
+            isUser: false,
+          );
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
       setState(() {
-        _messages.add(_ChatMessage(
-          text: '',
+        _messages[streamingIndex] = _ChatMessage(
+          text: buffer.isEmpty ? '응답을 받지 못했습니다. (${e.toString()})' : buffer.toString(),
           isUser: false,
-          place: _getMockPlace(),
-        ));
+        );
       });
-      _scrollToBottom();
-    } else {
-      _addPersonaMessage(_getMockResponse());
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
-  }
-
-  String _getMockResponse() {
-    if (widget.personaName.contains('조폭')) {
-      return '행님, 저만 믿으십쇼! 제가 좋은 데 알아보겠습니다.';
-    } else if (widget.personaName.contains('로봇')) {
-      return '입력 수신. 감정 파라미터 분석 중. 잠시 대기.';
-    } else {
-      return '아이고, 그런 일이 있었구나. 할미가 다 들어줄께.';
-    }
-  }
-
-  String _getRecommendText() {
-    if (widget.personaName.contains('조폭')) {
-      return '행님, 제가 좋은 데 알아왔습니다! 한번 가보십쇼.';
-    } else if (widget.personaName.contains('로봇')) {
-      return '분석 완료. 감정 벡터 매칭 결과, 최적 장소 1건 도출.';
-    } else {
-      return '아가, 할미가 딱 좋은 데 알어. 여기 가봐라.';
-    }
-  }
-
-  _PlaceData _getMockPlace() {
-    return const _PlaceData(
-      name: '숲속 쉼터 카페',
-      category: '카페',
-      address: '서울특별시 성동구 서울숲2길 32-8',
-      lat: 37.5445,
-      lng: 127.0374,
-      atmosphereText: '조용하고 따뜻한 분위기, 혼자 오기 좋은 곳',
-      operatingHours: '09:00 - 22:00',
-      maxGroupSize: 4,
-      isOutdoor: false,
-      personaReason: '지친 마음을 달래기에 딱 좋은 공간입니다.',
-    );
   }
 
   void _scrollToBottom() {
@@ -172,6 +192,22 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: '장소 추천 받기',
+            icon: _recommending
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: widget.accentColor,
+                    ),
+                  )
+                : Icon(Icons.place_outlined, color: widget.accentColor),
+            onPressed: _recommending ? null : _requestRecommendation,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -184,26 +220,27 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final message = _messages[index];
                 if (message.place != null) {
+                  final place = message.place!;
                   return Align(
                     alignment: Alignment.centerLeft,
                     child: PlaceCard(
-                      name: message.place!.name,
-                      category: message.place!.category,
-                      address: message.place!.address,
-                      atmosphereText: message.place!.atmosphereText,
-                      operatingHours: message.place!.operatingHours,
-                      maxGroupSize: message.place!.maxGroupSize,
-                      isOutdoor: message.place!.isOutdoor,
-                      personaReason: message.place!.personaReason,
+                      name: place.name,
+                      category: place.category,
+                      address: place.address,
+                      atmosphereText: place.atmosphereText,
+                      operatingHours: place.operatingHoursText,
+                      maxGroupSize: place.maxGroupSize,
+                      isOutdoor: place.isOutdoor,
+                      personaReason: place.reason,
                       accentColor: widget.accentColor,
                       onMapTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => MapScreen(
-                              placeName: message.place!.name,
-                              address: message.place!.address,
-                              lat: message.place!.lat,
-                              lng: message.place!.lng,
+                              placeName: place.name,
+                              address: place.address,
+                              lat: place.lat,
+                              lng: place.lng,
                             ),
                           ),
                         );
@@ -273,36 +310,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-class _PlaceData {
-  final String name;
-  final String category;
-  final String address;
-  final double lat;
-  final double lng;
-  final String? atmosphereText;
-  final String? operatingHours;
-  final int? maxGroupSize;
-  final bool isOutdoor;
-  final String? personaReason;
-
-  const _PlaceData({
-    required this.name,
-    required this.category,
-    required this.address,
-    required this.lat,
-    required this.lng,
-    this.atmosphereText,
-    this.operatingHours,
-    this.maxGroupSize,
-    this.isOutdoor = false,
-    this.personaReason,
-  });
-}
-
 class _ChatMessage {
   final String text;
   final bool isUser;
-  final _PlaceData? place;
+  final RecommendedPlace? place;
 
   const _ChatMessage({required this.text, required this.isUser, this.place});
 }
