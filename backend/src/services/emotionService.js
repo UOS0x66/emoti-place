@@ -6,6 +6,12 @@ const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
 
 /**
  * 대화 히스토리에서 Plutchik 8감정 스코어를 추출하고 세션에 저장한다.
+ *
+ * 설계서 라벨 규약:
+ * - energy_level: "LOW" | "MEDIUM" | "HIGH"
+ * - companion: "ALONE" | "TWO" | "GROUP"
+ * - activity_preference: "STATIC" | "ACTIVE"
+ * - time_preference: "DAY" | "NIGHT" | "NONE"
  */
 async function extractEmotions(sessionId) {
   const session = await getSession(sessionId);
@@ -29,13 +35,13 @@ async function extractEmotions(sessionId) {
   const content = response.choices[0].message.content;
   const emotionScores = JSON.parse(content);
 
-  // 세션에 감정 스코어 저장
+  // 세션에 감정 스코어 저장 (설계서 라벨 규약 그대로)
   await updateSession(sessionId, {
     emotion_scores: emotionScores,
-    energy_level: emotionScores.energy || 'medium',
-    companion: emotionScores.companion || 'alone',
-    activity_preference: emotionScores.activity_preference || 'passive',
-    time_preference: emotionScores.time_preference || 'any',
+    energy_level: emotionScores.energy_level || 'MEDIUM',
+    companion: emotionScores.companion || 'ALONE',
+    activity_preference: emotionScores.activity_preference || 'STATIC',
+    time_preference: emotionScores.time_preference || 'NONE',
   });
 
   return emotionScores;

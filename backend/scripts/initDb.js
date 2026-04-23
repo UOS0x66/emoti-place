@@ -33,10 +33,10 @@ CREATE TABLE IF NOT EXISTS session (
   prescription_text TEXT,
   psych_rationale TEXT,
   conversation_history JSONB DEFAULT '[]',
-  energy_level VARCHAR(20) DEFAULT 'medium',
-  companion VARCHAR(20) DEFAULT 'alone',
-  activity_preference VARCHAR(20) DEFAULT 'passive',
-  time_preference VARCHAR(20) DEFAULT 'any',
+  energy_level VARCHAR(20) DEFAULT 'MEDIUM',
+  companion VARCHAR(20) DEFAULT 'ALONE',
+  activity_preference VARCHAR(20) DEFAULT 'STATIC',
+  time_preference VARCHAR(20) DEFAULT 'NONE',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '24 hours')
 );

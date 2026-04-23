@@ -1,10 +1,10 @@
 const openai = require('../config/openai');
 const chroma = require('../config/chroma');
 const pool = require('../config/db');
-const PERSONAS = require('../prompts/personas');
 const { getSession, updateSession } = require('./sessionService');
 const { extractEmotions } = require('./emotionService');
 const { generatePrescription } = require('./prescriptionService');
+const { buildReasonPrompt } = require('../prompts/reason');
 const { haversineKm } = require('../utils/geo');
 
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
@@ -12,9 +12,9 @@ const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
 /**
  * 3단계 파이프라인 전체를 실행하여 장소를 추천한다.
  *
- * Stage 1: 감정 추출 (emotionService)
- * Stage 2: 경험 처방 생성 (prescriptionService)
- * Stage 3: 벡터 검색 + PostgreSQL 필터 (이 파일)
+ * Stage 1: 감정 추출 (PROMPT_EMOTION)
+ * Stage 2: 환경 니즈 도출 (PROMPT_ENVNEED) — 출력: environment_query + psych_rationale
+ * Stage 3: 벡터 검색 + PostgreSQL 필터 + 페르소나별 추천 사유 생성 (PROMPT_REASON)
  */
 async function recommend(sessionId, lat, lng) {
   const session = await getSession(sessionId);
@@ -22,12 +22,12 @@ async function recommend(sessionId, lat, lng) {
   // ── Stage 1: 감정 추출 ──
   const emotionScores = await extractEmotions(sessionId);
 
-  // ── Stage 2: 경험 처방 생성 ──
+  // ── Stage 2: 환경 니즈 도출 ──
   const prescription = await generatePrescription(emotionScores);
 
   // 세션에 처방 저장
   await updateSession(sessionId, {
-    prescription_text: prescription.prescription_text,
+    prescription_text: prescription.environment_query,
     psych_rationale: prescription.psych_rationale,
   });
 
@@ -35,11 +35,11 @@ async function recommend(sessionId, lat, lng) {
   let places = [];
 
   try {
-    // 3-1: Chroma 벡터 검색
+    // 3-1: Chroma 벡터 검색 (environment_query로 임베딩)
     const collection = await chroma.getCollection({ name: 'place_embeddings' });
 
     const results = await collection.query({
-      queryTexts: [prescription.prescription_text],
+      queryTexts: [prescription.environment_query],
       nResults: 10,
     });
 
@@ -73,10 +73,7 @@ async function recommend(sessionId, lat, lng) {
     }
   } catch {
     console.warn('[Recommend] Chroma 연결 실패, PostgreSQL에서 직접 검색');
-    // Chroma 미연결 시 PostgreSQL에서 가까운 장소를 직접 반환
-    const dbResult = await pool.query(
-      `SELECT * FROM place ORDER BY random() LIMIT 5`
-    );
+    const dbResult = await pool.query(`SELECT * FROM place ORDER BY random() LIMIT 5`);
     places = dbResult.rows.map((p) => ({
       ...p,
       distance_km: haversineKm(lat, lng, p.lat, p.lng),
@@ -84,13 +81,11 @@ async function recommend(sessionId, lat, lng) {
     }));
   }
 
-  // ── 페르소나 추천 사유 생성 ──
-  const persona = PERSONAS[session.persona_id];
+  // ── 페르소나 추천 사유 생성 (PROMPT_REASON) ──
   const placesWithReasons = await generatePersonaReasons(
-    persona,
+    session.persona_id,
     places,
-    prescription,
-    emotionScores
+    prescription.psych_rationale
   );
 
   // 추천 이력 저장
@@ -102,7 +97,7 @@ async function recommend(sessionId, lat, lng) {
         sessionId,
         place.place_id,
         place.semantic_similarity,
-        prescription.prescription_text,
+        prescription.environment_query,
         place.persona_reason,
         prescription.psych_rationale,
       ]
@@ -128,32 +123,25 @@ async function recommend(sessionId, lat, lng) {
       similarity: p.semantic_similarity,
     })),
     emotion_scores: emotionScores,
-    prescription: prescription,
+    prescription: {
+      environment_query: prescription.environment_query,
+      psych_rationale: prescription.psych_rationale,
+      applied_theories: prescription.applied_theories,
+    },
   };
 }
 
 /**
- * 페르소나 말투로 각 장소에 대한 추천 사유를 생성한다.
+ * PROMPT_REASON을 사용하여 페르소나 말투의 추천 사유를 생성한다.
  */
-async function generatePersonaReasons(persona, places, prescription, emotionScores) {
+async function generatePersonaReasons(personaId, places, psychRationale) {
   if (places.length === 0) return [];
 
-  const placeList = places
-    .map((p, i) => `${i + 1}. ${p.name} (${p.category}) - ${p.atmosphere_text || '정보 없음'}`)
-    .join('\n');
+  const messages = buildReasonPrompt(personaId, places, psychRationale);
 
   const response = await openai.chat.completions.create({
     model: LLM_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: `${persona.system_prompt}\n\n당신은 장소를 추천하는 상황입니다. 각 장소에 대해 캐릭터의 말투로 1~2문장의 추천 사유를 작성하세요. 반드시 JSON 배열로만 응답하세요: ["사유1", "사유2", ...]`,
-      },
-      {
-        role: 'user',
-        content: `사용자 감정: ${JSON.stringify(emotionScores)}\n심리학적 처방: ${prescription.prescription_text}\n\n추천 장소 목록:\n${placeList}\n\n각 장소에 대해 캐릭터 말투로 추천 사유를 작성하세요.`,
-      },
-    ],
+    messages,
     temperature: 0.7,
     response_format: { type: 'json_object' },
   });
@@ -161,16 +149,25 @@ async function generatePersonaReasons(persona, places, prescription, emotionScor
   try {
     const content = response.choices[0].message.content;
     const parsed = JSON.parse(content);
-    const reasons = Array.isArray(parsed) ? parsed : parsed.reasons || [];
+    const reasons = Array.isArray(parsed) ? parsed : parsed.reasons || parsed.items || [];
 
-    return places.map((p, i) => ({
+    // place_id 매칭 방식으로 결합
+    const reasonMap = new Map();
+    for (const r of reasons) {
+      if (r && r.place_id != null) {
+        reasonMap.set(Number(r.place_id), r.persona_reason || '');
+      }
+    }
+
+    return places.map((p) => ({
       ...p,
-      persona_reason: reasons[i] || `${persona.name}이(가) 추천하는 장소입니다.`,
+      persona_reason:
+        reasonMap.get(Number(p.place_id)) || '이 공간이 지금의 당신에게 적합합니다.',
     }));
   } catch {
     return places.map((p) => ({
       ...p,
-      persona_reason: `${persona.name}이(가) 추천하는 장소입니다.`,
+      persona_reason: '이 공간이 지금의 당신에게 적합합니다.',
     }));
   }
 }
