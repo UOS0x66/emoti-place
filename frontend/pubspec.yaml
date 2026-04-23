@@ -39,6 +39,8 @@ dependencies:
   permission_handler: ^12.0.1
   flutter_naver_map: ^1.4.4
   flutter_dotenv: ^6.0.0
+  http: ^1.6.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

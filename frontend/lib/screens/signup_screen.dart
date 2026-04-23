@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../services/api_client.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -14,6 +16,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordConfirmController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -24,9 +27,45 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _signup() {
-    // TODO: 백엔드 회원가입 API 연동
-    Navigator.of(context).pop();
+  Future<void> _signup() async {
+    final email = _emailController.text.trim();
+    final nickname = _nicknameController.text.trim();
+    final password = _passwordController.text;
+    final passwordConfirm = _passwordConfirmController.text;
+
+    if (email.isEmpty || nickname.isEmpty || password.isEmpty) {
+      _showError('모든 항목을 입력해주세요.');
+      return;
+    }
+    if (password != passwordConfirm) {
+      _showError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await AuthService.signup(email: email, nickname: nickname, password: password);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('회원가입이 완료되었습니다.'),
+          backgroundColor: Color(0xFF333333),
+        ),
+      );
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('서버에 연결할 수 없습니다.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: const Color(0xFF333333)),
+    );
   }
 
   @override
@@ -124,7 +163,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _signup,
+                    onPressed: _loading ? null : _signup,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF6B35),
                       foregroundColor: Colors.white,
@@ -133,13 +172,22 @@ class _SignupScreenState extends State<SignupScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      '가입하기',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            '가입하기',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
               ],

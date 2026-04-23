@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../services/api_client.dart';
 import 'persona_selection_screen.dart';
 import 'signup_screen.dart';
 
@@ -13,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _idController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -21,12 +24,36 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    // TODO: 실제 로그인 로직 연동
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const PersonaSelectionScreen(),
-      ),
+  Future<void> _login() async {
+    final email = _idController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      _showError('이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await AuthService.login(email: email, password: password);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const PersonaSelectionScreen(),
+        ),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('서버에 연결할 수 없습니다.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: const Color(0xFF333333)),
     );
   }
 
@@ -128,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _login,
+                    onPressed: _loading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF6B35),
                       foregroundColor: Colors.white,
@@ -137,13 +164,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      '로그인',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            '로그인',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
