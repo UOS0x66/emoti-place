@@ -1,2 +1,7 @@
 node_modules/
 .env
+data/raw/
+data/processed/
+chroma-data/
+pgdata/
+pgdata-server.log

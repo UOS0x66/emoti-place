@@ -7,7 +7,16 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "init-db": "node scripts/initDb.js",
-    "seed-personas": "node scripts/seedPersonas.js"
+    "seed-personas": "node scripts/seedPersonas.js",
+    "etl:migrate": "node scripts/etl/migrate.js",
+    "etl:collect": "node scripts/etl/collect.js",
+    "etl:load-places": "node scripts/etl/loadPlaces.js",
+    "etl:embed-index": "node scripts/etl/embedAndIndex.js",
+    "etl:run": "node scripts/etl/runEtl.js",
+    "etl:search": "node scripts/etl/search.js",
+    "etl:export": "node scripts/etl/exportDist.js",
+    "etl:restore": "node scripts/etl/restoreFromDist.js",
+    "pglite": "node scripts/etl/pgliteServer.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -21,6 +30,8 @@
     "uuid": "^11.0.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.4.4",
+    "@electric-sql/pglite-socket": "^0.1.4",
     "nodemon": "^3.1.9"
   }
 }
