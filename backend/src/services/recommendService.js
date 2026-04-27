@@ -6,6 +6,7 @@ const { extractEmotions } = require('./emotionService');
 const { generatePrescription } = require('./prescriptionService');
 const { buildReasonPrompt } = require('../prompts/reason');
 const { haversineKm } = require('../utils/geo');
+const { embedTexts } = require('../etl/embedders/openaiEmbedder');
 
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
 
@@ -35,11 +36,13 @@ async function recommend(sessionId, lat, lng) {
   let places = [];
 
   try {
-    // 3-1: Chroma 벡터 검색 (environment_query로 임베딩)
+    // 3-1: Chroma 벡터 검색 — 컬렉션이 외부 임베딩(OpenAI 768d)으로 적재되어 있어
+    //      queryTexts 대신 queryEmbeddings 사용 (Chroma 기본 임베딩 함수와 차원 mismatch 방지)
     const collection = await chroma.getCollection({ name: 'place_embeddings' });
+    const [queryEmbedding] = await embedTexts([prescription.environment_query]);
 
     const results = await collection.query({
-      queryTexts: [prescription.environment_query],
+      queryEmbeddings: [queryEmbedding],
       nResults: 10,
     });
 
