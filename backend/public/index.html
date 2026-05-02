@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Emoti-Place — 백엔드 검증 콘솔</title>
+<style>
+  :root {
+    --bg: #0e1014; --panel: #161a21; --line: #262c36;
+    --txt: #e6e9ef; --mute: #8a93a6; --acc: #62a8ff;
+    --warn: #f0b150; --err: #ff6e6e; --ok: #58c478;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--txt);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  header .who { color: var(--mute); font-size: 13px; }
+  header .who b { color: var(--txt); }
+  header button { margin-left: auto; }
+  main { display: grid; grid-template-columns: 360px 1fr 380px; gap: 0; height: calc(100vh - 49px); }
+  section { border-right: 1px solid var(--line); overflow-y: auto; padding: 16px; }
+  section:last-child { border-right: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mute); margin: 0 0 10px; }
+  label { display: block; font-size: 12px; color: var(--mute); margin: 8px 0 4px; }
+  input, select, textarea, button {
+    width: 100%; padding: 8px 10px; background: var(--panel); color: var(--txt);
+    border: 1px solid var(--line); border-radius: 6px; font: inherit;
+  }
+  button { cursor: pointer; background: var(--acc); color: #0a0d12; border: 0; font-weight: 600; transition: filter .12s; }
+  button:hover { filter: brightness(1.08); }
+  button.ghost { background: transparent; color: var(--txt); border: 1px solid var(--line); font-weight: 400; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; color: var(--mute); margin: 2px 4px 0 0; }
+  .pill.on { background: #1d2c46; color: var(--acc); border-color: #2a4a7a; }
+  .log { font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--mute); white-space: pre-wrap; word-break: break-word; padding: 8px; background: var(--panel); border-radius: 6px; min-height: 60px; max-height: 220px; overflow: auto; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--line); padding: 10px 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+  .toast.err { border-color: var(--err); color: var(--err); }
+  .toast.ok { border-color: var(--ok); color: var(--ok); }
+  /* 채팅 */
+  .chat-wrap { display: flex; flex-direction: column; height: 100%; }
+  .chat-stream { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 80%; padding: 10px 12px; border-radius: 12px; white-space: pre-wrap; line-height: 1.5; }
+  .msg.user { align-self: flex-end; background: #1d2c46; border: 1px solid #2a4a7a; }
+  .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+  .msg.assistant.streaming::after { content: '▍'; color: var(--acc); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .chat-input { padding: 12px; border-top: 1px solid var(--line); display: flex; gap: 8px; }
+  .chat-input input { flex: 1; }
+  .chat-input button { width: auto; padding: 8px 16px; }
+  /* 추천 결과 */
+  .place { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .place img { width: 100%; height: 130px; object-fit: cover; display: block; background: #0a0d12; }
+  .place .body { padding: 10px 12px; }
+  .place h3 { margin: 0 0 4px; font-size: 14px; }
+  .place .meta { font-size: 12px; color: var(--mute); }
+  .place .reason { margin-top: 6px; font-size: 13px; line-height: 1.45; }
+  .place .badges { margin-top: 6px; }
+  .scores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; font-size: 12px; }
+  .score { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; text-align: center; }
+  .score b { display: block; color: var(--acc); }
+  details { margin-top: 8px; }
+  details summary { cursor: pointer; color: var(--mute); font-size: 12px; }
+  pre { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--mute); white-space: pre-wrap; word-break: break-word; background: var(--panel); padding: 8px; border-radius: 6px; max-height: 200px; overflow: auto; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Emoti-Place 검증 콘솔</h1>
+  <span class="who" id="who">로그인 필요</span>
+  <button class="ghost" id="logoutBtn" style="width:auto" onclick="logout()">로그아웃</button>
+</header>
+
+<main>
+  <!-- LEFT: 인증 + 세션 + 추천 트리거 -->
+  <section>
+    <div id="authPanel">
+      <h2>1. 회원가입 / 로그인</h2>
+      <label>이메일</label>
+      <input id="email" placeholder="test@x.com" value="test@x.com" />
+      <label>닉네임 <span style="color:var(--mute)">(가입 시)</span></label>
+      <input id="nickname" placeholder="테스터" value="테스터" />
+      <label>비밀번호</label>
+      <input id="password" type="password" placeholder="pw1234" value="pw1234" />
+      <label>MBTI <span style="color:var(--mute)">(옵션)</span></label>
+      <input id="mbti" placeholder="INFJ" value="INFJ" maxlength="4" />
+      <div class="row" style="margin-top:10px">
+        <button onclick="signup()">가입</button>
+        <button class="ghost" onclick="login()">로그인</button>
+      </div>
+    </div>
+
+    <div id="sessionPanel" class="hidden">
+      <h2>2. 페르소나 선택</h2>
+      <div id="personaList" class="stack"></div>
+
+      <h2 style="margin-top:18px">MBTI 변경</h2>
+      <div class="row">
+        <input id="mbtiPatch" placeholder="INFJ" maxlength="4" />
+        <button onclick="patchMbti()">적용</button>
+      </div>
+
+      <h2 style="margin-top:18px">3. 추천 받기</h2>
+      <label>위도 / 경도</label>
+      <div class="row">
+        <input id="lat" value="37.5665" />
+        <input id="lng" value="126.9780" />
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" onclick="useGeolocation()">현재 위치</button>
+        <button onclick="recommend()" id="recBtn" disabled>추천 요청</button>
+      </div>
+      <p style="font-size:12px;color:var(--mute);margin-top:8px">※ 채팅 2~3턴 누적 후 요청해야 감정 추출 정확도가 높아짐.</p>
+    </div>
+
+    <h2 style="margin-top:18px">로그</h2>
+    <div class="log" id="log">대기 중…</div>
+  </section>
+
+  <!-- CENTER: 채팅 -->
+  <section style="padding:0; display:flex; flex-direction:column">
+    <div style="padding:16px 16px 0">
+      <h2>채팅 <span id="sessionLabel" style="color:var(--mute);font-weight:normal"></span></h2>
+    </div>
+    <div class="chat-wrap">
+      <div class="chat-stream" id="chatStream">
+        <div class="msg assistant">로그인 → 페르소나 선택 → 메시지를 보내세요.</div>
+      </div>
+      <div class="chat-input">
+        <input id="chatInput" placeholder="감정·상황을 자유롭게 (예: 오늘 너무 지쳤어 회복하고 싶어)"
+               onkeydown="if(event.key==='Enter')sendMessage()" disabled />
+        <button onclick="sendMessage()" id="sendBtn" disabled>보내기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: 감정 + 처방 + 추천 결과 -->
+  <section>
+    <h2>감정 점수 (Plutchik 8)</h2>
+    <div id="scores" class="scores">
+      <div class="score">joy<b>—</b></div><div class="score">trust<b>—</b></div>
+      <div class="score">fear<b>—</b></div><div class="score">surprise<b>—</b></div>
+      <div class="score">sadness<b>—</b></div><div class="score">disgust<b>—</b></div>
+      <div class="score">anger<b>—</b></div><div class="score">anticipation<b>—</b></div>
+    </div>
+
+    <h2 style="margin-top:18px">처방</h2>
+    <div id="prescription" style="font-size:13px;color:var(--mute)">추천 요청 시 채워짐</div>
+
+    <h2 style="margin-top:18px">장소 추천</h2>
+    <div id="places"></div>
+  </section>
+</main>
+
+<script>
+let token = localStorage.getItem('ep_token') || null;
+let userInfo = JSON.parse(localStorage.getItem('ep_user') || 'null');
+let sessionId = null;
+
+function $(id){ return document.getElementById(id); }
+function log(msg, kind=''){
+  const el = $('log');
+  const stamp = new Date().toLocaleTimeString();
+  el.textContent = `[${stamp}] ${msg}\n` + el.textContent;
+  if (kind) toast(msg, kind);
+}
+function toast(msg, kind=''){
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 3500);
+}
+function setAuthState(){
+  if (token && userInfo) {
+    $('who').innerHTML = `<b>${userInfo.nickname}</b> · MBTI: ${userInfo.mbti || '없음'}`;
+    $('authPanel').classList.add('hidden');
+    $('sessionPanel').classList.remove('hidden');
+    $('mbtiPatch').value = userInfo.mbti || '';
+    loadPersonas();
+  } else {
+    $('who').textContent = '로그인 필요';
+    $('authPanel').classList.remove('hidden');
+    $('sessionPanel').classList.add('hidden');
+  }
+}
+async function api(method, path, body, withAuth=true){
+  const headers = { 'Content-Type': 'application/json' };
+  if (withAuth && token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = { error: text }; }
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+async function signup(){
+  try {
+    const body = { email: $('email').value, nickname: $('nickname').value, password: $('password').value };
+    const m = $('mbti').value.trim(); if (m) body.mbti = m;
+    const r = await api('POST', '/api/auth/signup', body, false);
+    token = r.token; userInfo = { nickname: r.nickname, mbti: r.mbti };
+    localStorage.setItem('ep_token', token); localStorage.setItem('ep_user', JSON.stringify(userInfo));
+    log('가입 완료: ' + r.user_id, 'ok'); setAuthState();
+  } catch(e){ log('가입 실패: ' + e.message, 'err'); }
+}
+async function login(){
+  try {
+    const r = await api('POST', '/api/auth/login', { email: $('email').value, password: $('password').value }, false);
+    token = r.token; userInfo = { nickname: r.nickname, mbti: r.mbti };
+    localStorage.setItem('ep_token', token); localStorage.setItem('ep_user', JSON.stringify(userInfo));
+    log('로그인: ' + r.nickname, 'ok'); setAuthState();
+  } catch(e){ log('로그인 실패: ' + e.message, 'err'); }
+}
+function logout(){
+  token = null; userInfo = null; sessionId = null;
+  localStorage.removeItem('ep_token'); localStorage.removeItem('ep_user');
+  $('chatStream').innerHTML = '<div class="msg assistant">로그아웃됨.</div>';
+  $('chatInput').disabled = true; $('sendBtn').disabled = true; $('recBtn').disabled = true;
+  $('sessionLabel').textContent = ''; setAuthState();
+}
+async function patchMbti(){
+  try {
+    const m = $('mbtiPatch').value.trim() || null;
+    const r = await api('PATCH', '/api/auth/mbti', { mbti: m });
+    userInfo.mbti = r.mbti;
+    localStorage.setItem('ep_user', JSON.stringify(userInfo));
+    log('MBTI 변경: ' + (r.mbti || '해제'), 'ok'); setAuthState();
+  } catch(e){ log('MBTI 변경 실패: ' + e.message, 'err'); }
+}
+async function loadPersonas(){
+  try {
+    const list = await api('GET', '/api/session/personas', null, false);
+    const el = $('personaList'); el.innerHTML = '';
+    list.forEach(p => {
+      const b = document.createElement('button');
+      b.className = 'ghost'; b.textContent = `${p.persona_id}. ${p.name}`;
+      b.onclick = () => createSession(p.persona_id, p.name);
+      el.appendChild(b);
+    });
+  } catch(e){ log('페르소나 로드 실패: ' + e.message, 'err'); }
+}
+async function createSession(personaId, name){
+  try {
+    const r = await api('POST', '/api/session/create', { persona_id: personaId });
+    sessionId = r.session_id;
+    $('sessionLabel').textContent = `· ${name} · ${sessionId.slice(0,8)}`;
+    $('chatStream').innerHTML = `<div class="msg assistant">[${name}] 세션 시작. 편하게 말하세요.</div>`;
+    $('chatInput').disabled = false; $('sendBtn').disabled = false; $('recBtn').disabled = false;
+    log('세션 생성: ' + sessionId.slice(0,8) + ' (' + name + ')', 'ok');
+  } catch(e){ log('세션 생성 실패: ' + e.message, 'err'); }
+}
+async function sendMessage(){
+  const input = $('chatInput'); const msg = input.value.trim();
+  if (!msg || !sessionId) return;
+  input.value = ''; input.disabled = true; $('sendBtn').disabled = true;
+
+  const stream = $('chatStream');
+  const userBubble = document.createElement('div');
+  userBubble.className = 'msg user'; userBubble.textContent = msg;
+  stream.appendChild(userBubble);
+  const aiBubble = document.createElement('div');
+  aiBubble.className = 'msg assistant streaming'; aiBubble.textContent = '';
+  stream.appendChild(aiBubble);
+  stream.scrollTop = stream.scrollHeight;
+
+  try {
+    const res = await fetch('/api/chat/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ session_id: sessionId, message: msg }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.token) { aiBubble.textContent += data.token; stream.scrollTop = stream.scrollHeight; }
+          if (data.done) { aiBubble.classList.remove('streaming'); }
+          if (data.error) { aiBubble.textContent = '[오류] ' + data.error; aiBubble.classList.remove('streaming'); }
+        } catch {}
+      }
+    }
+  } catch(e) {
+    aiBubble.textContent = '[오류] ' + e.message;
+    aiBubble.classList.remove('streaming');
+    log('채팅 오류: ' + e.message, 'err');
+  } finally {
+    input.disabled = false; $('sendBtn').disabled = false; input.focus();
+  }
+}
+function useGeolocation(){
+  if (!navigator.geolocation) return log('Geolocation 미지원', 'err');
+  navigator.geolocation.getCurrentPosition(
+    p => { $('lat').value = p.coords.latitude.toFixed(6); $('lng').value = p.coords.longitude.toFixed(6); log('현재 위치 적용', 'ok'); },
+    e => log('위치 가져오기 실패: ' + e.message, 'err')
+  );
+}
+async function recommend(){
+  if (!sessionId) return log('세션 없음', 'err');
+  $('recBtn').disabled = true; $('recBtn').textContent = '추천 중...';
+  try {
+    const lat = parseFloat($('lat').value); const lng = parseFloat($('lng').value);
+    const r = await api('POST', '/api/recommend', { session_id: sessionId, lat, lng });
+    renderScores(r.emotion_scores);
+    renderPrescription(r.prescription);
+    renderPlaces(r.places || []);
+    log(`추천 ${r.places?.length || 0}건`, 'ok');
+  } catch(e){ log('추천 실패: ' + e.message, 'err'); }
+  finally { $('recBtn').disabled = false; $('recBtn').textContent = '추천 요청'; }
+}
+function renderScores(s){
+  if (!s) return;
+  const order = ['joy','trust','fear','surprise','sadness','disgust','anger','anticipation'];
+  $('scores').innerHTML = order.map(k =>
+    `<div class="score">${k}<b>${(s[k] ?? 0).toFixed(2)}</b></div>`
+  ).join('');
+}
+function renderPrescription(p){
+  if (!p) return;
+  const must = (p.keywords_must || []).map(k => `<span class="pill on">${k}</span>`).join('');
+  const avoid = (p.keywords_avoid || []).map(k => `<span class="pill">−${k}</span>`).join('');
+  const mbtiSig = (p.mbti_signals_applied || []).map(k => `<span class="pill on">${k}</span>`).join('');
+  const theories = (p.referenced_theories || []).map(k => `<span class="pill">${k}</span>`).join('');
+  $('prescription').innerHTML = `
+    <div style="color:var(--txt);font-size:13px;line-height:1.5;margin-bottom:6px">${p.prescription_text || ''}</div>
+    <div style="font-size:12px;color:var(--mute);margin-bottom:6px">${p.psych_rationale || ''}</div>
+    <div>${must}${avoid}</div>
+    <div style="margin-top:6px">MBTI 적용: ${mbtiSig || '<span class="pill">없음</span>'}</div>
+    <div style="margin-top:4px">이론: ${theories}</div>
+    <details><summary>raw JSON</summary><pre>${JSON.stringify(p, null, 2)}</pre></details>
+  `;
+}
+function renderPlaces(places){
+  const el = $('places');
+  if (places.length === 0) { el.innerHTML = '<p style="color:var(--mute)">결과 없음</p>'; return; }
+  el.innerHTML = places.map(p => `
+    <div class="place">
+      ${p.photo ? `<img src="${p.photo}" alt="" onerror="this.remove()">` : ''}
+      <div class="body">
+        <h3>${escapeHtml(p.name || '이름 없음')}</h3>
+        <div class="meta">${escapeHtml(p.category || '')}${p.distance_km != null ? ` · ${p.distance_km.toFixed(2)} km` : ''}${p.address ? ' · ' + escapeHtml(p.address) : ''}</div>
+        ${p.reason ? `<div class="reason">${escapeHtml(p.reason)}</div>` : ''}
+        <div class="badges">
+          ${p.score != null ? `<span class="pill">score ${p.score.toFixed(3)}</span>` : ''}
+          ${p.similarity != null ? `<span class="pill">sim ${p.similarity.toFixed(3)}</span>` : ''}
+          ${p.keyword_hits ? `<span class="pill on">+${p.keyword_hits} hit</span>` : ''}
+          ${p.is_outdoor ? `<span class="pill">야외</span>` : ''}
+        </div>
+        <details><summary>분위기 텍스트</summary><pre>${escapeHtml(p.atmosphere_text || '')}</pre></details>
+      </div>
+    </div>
+  `).join('');
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+setAuthState();
+</script>
+</body>
+</html>

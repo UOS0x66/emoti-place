@@ -5,8 +5,8 @@
  * cosine 거리 기준.
  */
 
-const chroma = require('../../config/chroma');
-const { EMBEDDING_MODEL } = require('../embedders/openaiEmbedder');
+import chroma from '../../config/chroma.js';
+import { EMBEDDING_MODEL } from '../embedders/openaiEmbedder.js';
 
 const COLLECTION_NAME = 'place_embeddings';
 
@@ -54,10 +54,8 @@ async function countCollection() {
   return collection.count();
 }
 
-module.exports = {
-  COLLECTION_NAME,
+export { COLLECTION_NAME,
   getOrCreateCollection,
   upsertEmbeddings,
   resetCollection,
-  countCollection,
-};
+  countCollection, };

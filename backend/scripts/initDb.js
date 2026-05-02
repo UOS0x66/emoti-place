@@ -1,5 +1,5 @@
-require('dotenv').config();
-const { Pool } = require('pg');
+import 'dotenv/config';
+import { Pool } from 'pg';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -12,8 +12,27 @@ CREATE TABLE IF NOT EXISTS "user" (
   email VARCHAR(255) UNIQUE NOT NULL,
   nickname VARCHAR(50) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  mbti CHAR(4),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT user_mbti_format
+    CHECK (mbti IS NULL OR mbti ~ '^[EI][SN][TF][JP]$')
 );
+
+-- 기존 user 테이블이 이미 있을 경우 mbti 컬럼만 추가
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS mbti CHAR(4);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.constraint_column_usage
+    WHERE constraint_name = 'user_mbti_format'
+  ) THEN
+    BEGIN
+      ALTER TABLE "user" ADD CONSTRAINT user_mbti_format
+        CHECK (mbti IS NULL OR mbti ~ '^[EI][SN][TF][JP]$');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END IF;
+END $$;
 
 -- 페르소나 테이블
 CREATE TABLE IF NOT EXISTS persona (
@@ -44,8 +63,12 @@ CREATE TABLE IF NOT EXISTS session (
 -- 장소 테이블
 CREATE TABLE IF NOT EXISTS place (
   place_id SERIAL PRIMARY KEY,
+  tour_content_id VARCHAR(50) UNIQUE,
   name VARCHAR(200) NOT NULL,
   category VARCHAR(100),
+  contenttypeid VARCHAR(10),
+  cat3 VARCHAR(20),
+  sigungucode INTEGER,
   address TEXT,
   lat DOUBLE PRECISION,
   lng DOUBLE PRECISION,
@@ -56,6 +79,23 @@ CREATE TABLE IF NOT EXISTS place (
   is_outdoor BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기존 place 테이블에 tour_content_id 등 누락 컬럼 추가
+ALTER TABLE place ADD COLUMN IF NOT EXISTS tour_content_id VARCHAR(50);
+ALTER TABLE place ADD COLUMN IF NOT EXISTS contenttypeid VARCHAR(10);
+ALTER TABLE place ADD COLUMN IF NOT EXISTS cat3 VARCHAR(20);
+ALTER TABLE place ADD COLUMN IF NOT EXISTS sigungucode INTEGER;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'place_tour_content_id_key'
+  ) THEN
+    BEGIN
+      ALTER TABLE place ADD CONSTRAINT place_tour_content_id_key UNIQUE (tour_content_id);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END IF;
+END $$;
 
 -- 심리학 문헌 테이블
 CREATE TABLE IF NOT EXISTS psych_reference (

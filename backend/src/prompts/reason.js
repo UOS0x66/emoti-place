@@ -189,4 +189,4 @@ ${placeList}
   ];
 }
 
-module.exports = { buildReasonPrompt };
+export { buildReasonPrompt };

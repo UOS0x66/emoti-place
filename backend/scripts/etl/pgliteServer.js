@@ -13,9 +13,9 @@
  * 데이터 영속화: ./pgdata 디렉토리 (gitignore 처리됨)
  */
 
-require('dotenv').config();
-const { PGlite } = require('@electric-sql/pglite');
-const { PGLiteSocketServer } = require('@electric-sql/pglite-socket');
+import 'dotenv/config';
+import { PGlite } from '@electric-sql/pglite';
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 
 const PORT = Number(process.env.PGLITE_PORT || 5433);
 const DATA_DIR = process.env.PGDATA_DIR || './pgdata';

@@ -6,7 +6,7 @@
  *    `dimensions` 파라미터로 768로 truncate (Matryoshka 표현).
  */
 
-const openai = require('../../config/openai');
+import openai from '../../config/openai.js';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIM = 768;
@@ -38,4 +38,4 @@ async function embedBatched(texts, { batchSize = DEFAULT_BATCH_SIZE, ...opts } =
   return out;
 }
 
-module.exports = { embedTexts, embedBatched, EMBEDDING_MODEL, EMBEDDING_DIM };
+export { embedTexts, embedBatched, EMBEDDING_MODEL, EMBEDDING_DIM };

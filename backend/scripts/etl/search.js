@@ -12,10 +12,10 @@
  *   -k, --k  결과 개수 (기본 5)
  */
 
-require('dotenv').config();
-const pool = require('../../src/config/db');
-const chroma = require('../../src/config/chroma');
-const { embedTexts } = require('../../src/etl/embedders/openaiEmbedder');
+import 'dotenv/config';
+import pool from '../../src/config/db.js';
+import chroma from '../../src/config/chroma.js';
+import { embedTexts } from '../../src/etl/embedders/openaiEmbedder.js';
 
 function parseCli(argv) {
   const args = { query: [], k: 5, where: null, outdoor: undefined };

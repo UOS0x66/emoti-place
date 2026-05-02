@@ -7,8 +7,8 @@
  * 실행: node scripts/etl/migrate.js
  */
 
-require('dotenv').config();
-const pool = require('../../src/config/db');
+import 'dotenv/config';
+import pool from '../../src/config/db.js';
 
 async function main() {
   try {

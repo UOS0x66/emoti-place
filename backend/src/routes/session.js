@@ -1,7 +1,7 @@
-const { Router } = require('express');
-const authMiddleware = require('../middleware/auth');
-const { createSession } = require('../services/sessionService');
-const PERSONAS = require('../prompts/personas');
+import { Router } from 'express';
+import authMiddleware from '../middleware/auth.js';
+import { createSession } from '../services/sessionService.js';
+import PERSONAS from '../prompts/personas.js';
 
 const router = Router();
 
@@ -30,4 +30,4 @@ router.post('/create', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

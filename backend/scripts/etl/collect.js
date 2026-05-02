@@ -9,16 +9,10 @@
  *   node scripts/etl/collect.js --sigungu=dongdaemun --category=restaurant --limit=50
  */
 
-require('dotenv').config();
-const { mkdir, writeFile, appendFile } = require('node:fs/promises');
-const { dirname } = require('node:path');
-const {
-  TARGET_CONTENT_TYPES,
-  AREA_CODE,
-  SEOUL_SIGUNGU,
-  fetchAreaBasedListAll,
-  fetchPlaceFullDetails,
-} = require('../../src/etl/fetchers/tourApiClient');
+import 'dotenv/config';
+import { mkdir, writeFile, appendFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { TARGET_CONTENT_TYPES, AREA_CODE, SEOUL_SIGUNGU, fetchAreaBasedListAll, fetchPlaceFullDetails } from '../../src/etl/fetchers/tourApiClient.js';
 
 const CATEGORY_ALIAS = {
   restaurant: { id: TARGET_CONTENT_TYPES.RESTAURANT, label: 'restaurant' },

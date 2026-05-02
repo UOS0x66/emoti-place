@@ -10,11 +10,11 @@
  *   node scripts/etl/exportDist.js
  */
 
-require('dotenv').config();
-const { mkdirSync, writeFileSync, readFileSync } = require('node:fs');
-const path = require('node:path');
-const pool = require('../../src/config/db');
-const { EMBEDDING_MODEL, EMBEDDING_DIM } = require('../../src/etl/embedders/openaiEmbedder');
+import 'dotenv/config';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import pool from '../../src/config/db.js';
+import { EMBEDDING_MODEL, EMBEDDING_DIM } from '../../src/etl/embedders/openaiEmbedder.js';
 
 const DIST_DIR = 'data/dist';
 

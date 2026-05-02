@@ -1,6 +1,6 @@
-const openai = require('../config/openai');
-const PERSONAS = require('../prompts/personas');
-const { getSession, updateSession } = require('./sessionService');
+import openai from '../config/openai.js';
+import PERSONAS from '../prompts/personas.js';
+import { getSession, updateSession } from './sessionService.js';
 
 const MAX_HISTORY = 20;
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
@@ -73,4 +73,4 @@ async function streamChat(sessionId, userMessage, res) {
   }
 }
 
-module.exports = { streamChat };
+export { streamChat };

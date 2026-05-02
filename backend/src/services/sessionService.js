@@ -1,6 +1,6 @@
-const { v4: uuidv4 } = require('uuid');
-const pool = require('../config/db');
-const PERSONAS = require('../prompts/personas');
+import { v4 as uuidv4 } from 'uuid';
+import pool from '../config/db.js';
+import PERSONAS from '../prompts/personas.js';
 
 async function createSession(userId, personaId) {
   const persona = PERSONAS[personaId];
@@ -54,4 +54,4 @@ async function updateSession(sessionId, updates) {
   );
 }
 
-module.exports = { createSession, getSession, updateSession };
+export { createSession, getSession, updateSession };

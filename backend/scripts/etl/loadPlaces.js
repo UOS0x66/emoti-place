@@ -10,14 +10,14 @@
  *   node scripts/etl/loadPlaces.js --sigungu=11    # 동대문구 파일만
  */
 
-require('dotenv').config();
-const { readdir, readFile, writeFile, mkdir, appendFile } = require('node:fs/promises');
-const { join, dirname } = require('node:path');
-const { buildAtmosphereText } = require('../../src/etl/transformers/atmosphereBuilder');
-const { mapToPlaceRow } = require('../../src/etl/transformers/placeMapper');
-const { upsertPlaceRows } = require('../../src/etl/loaders/postgresPlaceLoader');
-const { SEOUL_SIGUNGU } = require('../../src/etl/fetchers/tourApiClient');
-const pool = require('../../src/config/db');
+import 'dotenv/config';
+import { readdir, readFile, writeFile, mkdir, appendFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { buildAtmosphereText } from '../../src/etl/transformers/atmosphereBuilder.js';
+import { mapToPlaceRow } from '../../src/etl/transformers/placeMapper.js';
+import { upsertPlaceRows } from '../../src/etl/loaders/postgresPlaceLoader.js';
+import { SEOUL_SIGUNGU } from '../../src/etl/fetchers/tourApiClient.js';
+import pool from '../../src/config/db.js';
 
 function resolveSigungu(value) {
   if (value === undefined) return undefined;

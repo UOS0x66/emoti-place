@@ -135,8 +135,7 @@ async function fetchPlaceFullDetails(contentId, contentTypeId) {
   return { common, intro, info };
 }
 
-module.exports = {
-  TARGET_CONTENT_TYPES,
+export { TARGET_CONTENT_TYPES,
   AREA_CODE,
   SEOUL_SIGUNGU,
   fetchAreaBasedListPage,
@@ -144,5 +143,4 @@ module.exports = {
   fetchDetailCommon,
   fetchDetailIntro,
   fetchDetailInfo,
-  fetchPlaceFullDetails,
-};
+  fetchPlaceFullDetails, };

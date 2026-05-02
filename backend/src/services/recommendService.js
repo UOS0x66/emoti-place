@@ -1,178 +1,209 @@
-const openai = require('../config/openai');
-const chroma = require('../config/chroma');
-const pool = require('../config/db');
-const { getSession, updateSession } = require('./sessionService');
-const { extractEmotions } = require('./emotionService');
-const { generatePrescription } = require('./prescriptionService');
-const { buildReasonPrompt } = require('../prompts/reason');
-const { haversineKm } = require('../utils/geo');
-const { embedTexts } = require('../etl/embedders/openaiEmbedder');
-
-const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
-
 /**
- * 3단계 파이프라인 전체를 실행하여 장소를 추천한다.
+ * /api/recommend 메인 서비스 — Stage 1→2→3 풀 파이프라인 + 페르소나 사유.
  *
- * Stage 1: 감정 추출 (PROMPT_EMOTION)
- * Stage 2: 환경 니즈 도출 (PROMPT_ENVNEED) — 출력: environment_query + psych_rationale
- * Stage 3: 벡터 검색 + PostgreSQL 필터 + 페르소나별 추천 사유 생성 (PROMPT_REASON)
+ * 흐름:
+ *   1) 세션 조회 (대화 히스토리 + user_id)
+ *   2) Stage 1: extractEmotions(sessionId)
+ *   3) Stage 2: generatePrescription(sessionId) — user.mbti 자동 조회
+ *   4) Stage 3: recommendPlaces(prescription) — Chroma + 키워드 부스트
+ *   5) PG place join + GPS 거리 필터 (5km, 부족시 10km)
+ *   6) 페르소나 말투의 추천 사유 생성 (reason.js)
+ *   7) recommendation 이력 저장 + 응답
  */
-async function recommend(sessionId, lat, lng) {
+
+import openai from '../config/openai.js';
+import pool from '../config/db.js';
+import { getSession, updateSession } from './sessionService.js';
+import { extractEmotions } from './emotionService.js';
+import { generatePrescription } from './prescriptionService.js';
+import { recommendPlaces } from '../llm/placeRecommender.js';
+import { buildReasonPrompt } from '../prompts/reason.js';
+import { haversineKm } from '../utils/geo.js';
+
+const REASON_MODEL = process.env.REASON_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini';
+const TYPE_LABEL = { '12': '관광지', '14': '문화시설', '28': '레포츠', '39': '음식점' };
+
+export async function recommend(sessionId, lat, lng) {
   const session = await getSession(sessionId);
 
-  // ── Stage 1: 감정 추출 ──
-  const emotionScores = await extractEmotions(sessionId);
+  let emotionScores = session.emotion_scores;
+  if (!emotionScores) emotionScores = await extractEmotions(sessionId);
 
-  // ── Stage 2: 환경 니즈 도출 ──
-  const prescription = await generatePrescription(emotionScores);
-
-  // 세션에 처방 저장
+  const prescription = await generatePrescription(sessionId);
   await updateSession(sessionId, {
-    prescription_text: prescription.environment_query,
+    prescription_text: prescription.prescription_text,
     psych_rationale: prescription.psych_rationale,
   });
 
-  // ── Stage 3: 장소 매칭 ──
-  let places = [];
+  const candidates = await recommendPlaces(prescription, { nResults: 10 });
+  if (candidates.length === 0) return emptyResult(emotionScores, prescription);
 
-  try {
-    // 3-1: Chroma 벡터 검색 — 컬렉션이 외부 임베딩(OpenAI 768d)으로 적재되어 있어
-    //      queryTexts 대신 queryEmbeddings 사용 (Chroma 기본 임베딩 함수와 차원 mismatch 방지)
-    const collection = await chroma.getCollection({ name: 'place_embeddings' });
-    const [queryEmbedding] = await embedTexts([prescription.environment_query]);
+  // Chroma의 contentid → PG의 tour_content_id 매핑
+  const tourIds = candidates.map((c) => String(c.id));
+  const dbResult = await pool.query(
+    `SELECT * FROM place WHERE tour_content_id = ANY($1::varchar[])`,
+    [tourIds]
+  );
+  const byTourId = new Map(dbResult.rows.map((r) => [String(r.tour_content_id), r]));
 
-    const results = await collection.query({
-      queryEmbeddings: [queryEmbedding],
-      nResults: 10,
-    });
-
-    if (results.ids && results.ids[0] && results.ids[0].length > 0) {
-      const placeIds = results.ids[0];
-      const similarities = results.distances ? results.distances[0] : [];
-
-      // 3-2: PostgreSQL에서 장소 메타데이터 로드 + GPS 필터
-      const placeholders = placeIds.map((_, i) => `$${i + 1}`).join(', ');
-      const dbResult = await pool.query(
-        `SELECT * FROM place WHERE place_id IN (${placeholders})`,
-        placeIds
-      );
-
-      // GPS 거리 계산 및 필터 (5km, 부족 시 10km)
-      let filtered = dbResult.rows.map((p) => ({
-        ...p,
-        distance_km: haversineKm(lat, lng, p.lat, p.lng),
-        semantic_similarity: similarities[placeIds.indexOf(String(p.place_id))] || 0,
-      }));
-
-      let withinRange = filtered.filter((p) => p.distance_km <= 5);
-      if (withinRange.length < 3) {
-        withinRange = filtered.filter((p) => p.distance_km <= 10);
-      }
-
-      // 유사도 순 정렬, 상위 5개
-      places = withinRange
-        .sort((a, b) => a.semantic_similarity - b.semantic_similarity)
-        .slice(0, 5);
+  const enriched = candidates.map((c) => {
+    const pg = byTourId.get(String(c.id));
+    if (pg) {
+      return {
+        ...pg,
+        atmosphere_text: pg.atmosphere_text || c.atmosphere_text,
+        chroma_score: c.score,
+        chroma_base_similarity: c.base_similarity,
+        chroma_must_hits: c.must_hits,
+        category_label: TYPE_LABEL[c.contenttypeid] || pg.category || '',
+        distance_km: (pg.lat != null && pg.lng != null)
+          ? haversineKm(lat, lng, Number(pg.lat), Number(pg.lng))
+          : null,
+      };
     }
-  } catch {
-    console.warn('[Recommend] Chroma 연결 실패, PostgreSQL에서 직접 검색');
-    const dbResult = await pool.query(`SELECT * FROM place ORDER BY random() LIMIT 5`);
-    places = dbResult.rows.map((p) => ({
-      ...p,
-      distance_km: haversineKm(lat, lng, p.lat, p.lng),
-      semantic_similarity: 0,
-    }));
-  }
+    return {
+      place_id: null,
+      tour_content_id: c.id,
+      name: c.title,
+      category: c.cat3,
+      address: null,
+      lat: null,
+      lng: null,
+      operating_hours: null,
+      photos: [],
+      atmosphere_text: c.atmosphere_text,
+      chroma_score: c.score,
+      chroma_base_similarity: c.base_similarity,
+      chroma_must_hits: c.must_hits,
+      category_label: TYPE_LABEL[c.contenttypeid] || '',
+      distance_km: null,
+    };
+  });
 
-  // ── 페르소나 추천 사유 생성 (PROMPT_REASON) ──
+  // GPS 5km 필터, 부족하면 10km, 좌표 없는 건 통과
+  const within5 = enriched.filter((p) => p.distance_km == null || p.distance_km <= 5);
+  let filtered = within5.length >= 3
+    ? within5
+    : enriched.filter((p) => p.distance_km == null || p.distance_km <= 10);
+  if (filtered.length === 0) filtered = enriched;
+
+  filtered.sort((a, b) => (b.chroma_score ?? 0) - (a.chroma_score ?? 0));
+  const top = filtered.slice(0, 5);
+
   const placesWithReasons = await generatePersonaReasons(
     session.persona_id,
-    places,
+    top,
     prescription.psych_rationale
   );
 
-  // 추천 이력 저장
-  for (const place of placesWithReasons) {
-    await pool.query(
-      `INSERT INTO recommendation (session_id, place_id, semantic_similarity, prescription_text, persona_reason, psych_rationale)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        sessionId,
-        place.place_id,
-        place.semantic_similarity,
-        prescription.environment_query,
-        place.persona_reason,
-        prescription.psych_rationale,
-      ]
-    );
+  for (const p of placesWithReasons) {
+    if (p.place_id != null) {
+      await pool.query(
+        `INSERT INTO recommendation
+           (session_id, place_id, semantic_similarity, prescription_text, persona_reason, psych_rationale)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          sessionId,
+          p.place_id,
+          p.chroma_base_similarity ?? 0,
+          prescription.prescription_text,
+          p.persona_reason,
+          prescription.psych_rationale,
+        ]
+      );
+    }
   }
 
   return {
     places: placesWithReasons.map((p) => ({
       place_id: p.place_id,
+      tour_content_id: p.tour_content_id,
       name: p.name,
-      category: p.category,
+      category: p.category_label || p.category,
       address: p.address,
       lat: p.lat,
       lng: p.lng,
-      photo: p.photos ? p.photos[0] : null,
-      distance: Math.round(p.distance_km * 100) / 100,
+      photo: Array.isArray(p.photos) && p.photos.length > 0 ? p.photos[0] : null,
+      distance_km: p.distance_km != null ? Math.round(p.distance_km * 100) / 100 : null,
       atmosphere_text: p.atmosphere_text,
       operating_hours: p.operating_hours,
       max_group_size: p.max_group_size,
       is_outdoor: p.is_outdoor,
       reason: p.persona_reason,
-      psych_rationale: prescription.psych_rationale,
-      similarity: p.semantic_similarity,
+      similarity: p.chroma_base_similarity,
+      score: p.chroma_score,
+      keyword_hits: p.chroma_must_hits,
     })),
     emotion_scores: emotionScores,
     prescription: {
-      environment_query: prescription.environment_query,
+      prescription_text: prescription.prescription_text,
       psych_rationale: prescription.psych_rationale,
-      applied_theories: prescription.applied_theories,
+      referenced_theories: prescription.referenced_theories,
+      category_hint: prescription.category_hint,
+      keywords_must: prescription.keywords_must,
+      keywords_avoid: prescription.keywords_avoid,
+      mbti_signals_applied: prescription.mbti_signals_applied,
     },
   };
 }
 
-/**
- * PROMPT_REASON을 사용하여 페르소나 말투의 추천 사유를 생성한다.
- */
+function emptyResult(scores, prescription) {
+  return {
+    places: [],
+    emotion_scores: scores,
+    prescription: {
+      prescription_text: prescription.prescription_text,
+      psych_rationale: prescription.psych_rationale,
+      referenced_theories: prescription.referenced_theories,
+      category_hint: prescription.category_hint,
+      keywords_must: prescription.keywords_must,
+      keywords_avoid: prescription.keywords_avoid,
+      mbti_signals_applied: prescription.mbti_signals_applied,
+    },
+  };
+}
+
 async function generatePersonaReasons(personaId, places, psychRationale) {
   if (places.length === 0) return [];
 
-  const messages = buildReasonPrompt(personaId, places, psychRationale);
+  const reasonInput = places.map((p) => ({
+    place_id: p.place_id ?? `tour_${p.tour_content_id}`,
+    name: p.name,
+    category: p.category_label || p.category,
+    atmosphere_text: p.atmosphere_text,
+  }));
 
-  const response = await openai.chat.completions.create({
-    model: LLM_MODEL,
-    messages,
-    temperature: 0.7,
-    response_format: { type: 'json_object' },
-  });
+  const messages = buildReasonPrompt(personaId, reasonInput, psychRationale);
 
+  let parsed;
   try {
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
-    const reasons = Array.isArray(parsed) ? parsed : parsed.reasons || parsed.items || [];
-
-    // place_id 매칭 방식으로 결합
-    const reasonMap = new Map();
-    for (const r of reasons) {
-      if (r && r.place_id != null) {
-        reasonMap.set(Number(r.place_id), r.persona_reason || '');
-      }
-    }
-
-    return places.map((p) => ({
-      ...p,
-      persona_reason:
-        reasonMap.get(Number(p.place_id)) || '이 공간이 지금의 당신에게 적합합니다.',
-    }));
-  } catch {
+    const response = await openai.chat.completions.create({
+      model: REASON_MODEL,
+      messages,
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+    });
+    parsed = JSON.parse(response.choices[0].message.content);
+  } catch (err) {
     return places.map((p) => ({
       ...p,
       persona_reason: '이 공간이 지금의 당신에게 적합합니다.',
     }));
   }
-}
 
-module.exports = { recommend };
+  const reasonMap = new Map();
+  const reasons = Array.isArray(parsed) ? parsed : (parsed.reasons || parsed.items || []);
+  for (const r of reasons) {
+    if (r && r.place_id != null) {
+      reasonMap.set(String(r.place_id), r.persona_reason || '');
+    }
+  }
+
+  return places.map((p) => {
+    const key = String(p.place_id ?? `tour_${p.tour_content_id}`);
+    return {
+      ...p,
+      persona_reason: reasonMap.get(key) || '이 공간이 지금의 당신에게 적합합니다.',
+    };
+  });
+}

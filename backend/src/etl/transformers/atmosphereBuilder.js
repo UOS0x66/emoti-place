@@ -171,4 +171,4 @@ function buildAtmosphereText(record) {
   };
 }
 
-module.exports = { buildAtmosphereText, stripHtml, CAT3_LABEL };
+export { buildAtmosphereText, stripHtml, CAT3_LABEL };

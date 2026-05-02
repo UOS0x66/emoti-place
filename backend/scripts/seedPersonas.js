@@ -1,6 +1,6 @@
-require('dotenv').config();
-const { Pool } = require('pg');
-const PERSONAS = require('../src/prompts/personas');
+import 'dotenv/config';
+import { Pool } from 'pg';
+import PERSONAS from '../src/prompts/personas.js';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

@@ -1,10 +1,10 @@
-const bcrypt = require('bcrypt');
-const pool = require('../config/db');
-const { signToken } = require('../utils/jwt');
+import bcrypt from 'bcrypt';
+import pool from '../config/db.js';
+import { signToken } from '../utils/jwt.js';
 
 const SALT_ROUNDS = 10;
 
-async function signup(email, nickname, password) {
+async function signup(email, nickname, password, mbti = null) {
   const existing = await pool.query(
     'SELECT user_id FROM "user" WHERE email = $1',
     [email]
@@ -15,21 +15,32 @@ async function signup(email, nickname, password) {
     throw err;
   }
 
+  let normalizedMbti = null;
+  if (mbti) {
+    const m = String(mbti).toUpperCase().trim();
+    if (!/^[EI][SN][TF][JP]$/.test(m)) {
+      const err = new Error('MBTI 형식이 올바르지 않습니다 (예: INFJ)');
+      err.status = 400;
+      throw err;
+    }
+    normalizedMbti = m;
+  }
+
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const result = await pool.query(
-    `INSERT INTO "user" (email, nickname, password_hash)
-     VALUES ($1, $2, $3) RETURNING user_id`,
-    [email, nickname, passwordHash]
+    `INSERT INTO "user" (email, nickname, password_hash, mbti)
+     VALUES ($1, $2, $3, $4) RETURNING user_id, mbti`,
+    [email, nickname, passwordHash, normalizedMbti]
   );
 
   const userId = result.rows[0].user_id;
   const token = signToken(userId);
-  return { user_id: userId, token, nickname };
+  return { user_id: userId, token, nickname, mbti: result.rows[0].mbti };
 }
 
 async function login(email, password) {
   const result = await pool.query(
-    'SELECT user_id, nickname, password_hash FROM "user" WHERE email = $1',
+    'SELECT user_id, nickname, password_hash, mbti FROM "user" WHERE email = $1',
     [email]
   );
   if (result.rows.length === 0) {
@@ -47,7 +58,31 @@ async function login(email, password) {
   }
 
   const token = signToken(user.user_id);
-  return { user_id: user.user_id, token, nickname: user.nickname };
+  return { user_id: user.user_id, token, nickname: user.nickname, mbti: user.mbti };
 }
 
-module.exports = { signup, login };
+async function updateMbti(userId, mbti) {
+  let normalized = null;
+  if (mbti !== null && mbti !== undefined && mbti !== '') {
+    const m = String(mbti).toUpperCase().trim();
+    if (!/^[EI][SN][TF][JP]$/.test(m)) {
+      const err = new Error('MBTI 형식이 올바르지 않습니다 (예: INFJ)');
+      err.status = 400;
+      throw err;
+    }
+    normalized = m;
+  }
+
+  const result = await pool.query(
+    `UPDATE "user" SET mbti = $1 WHERE user_id = $2 RETURNING user_id, mbti`,
+    [normalized, userId]
+  );
+  if (result.rows.length === 0) {
+    const err = new Error('사용자를 찾을 수 없습니다.');
+    err.status = 404;
+    throw err;
+  }
+  return { user_id: result.rows[0].user_id, mbti: result.rows[0].mbti };
+}
+
+export { signup, login, updateMbti };

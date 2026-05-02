@@ -6,16 +6,11 @@
  *   node scripts/etl/embedAndIndex.js --reset   # 컬렉션 초기화 후 재적재
  */
 
-require('dotenv').config();
-const { readFileSync, writeFileSync, mkdirSync } = require('node:fs');
-const { dirname } = require('node:path');
-const { embedBatched, EMBEDDING_MODEL, EMBEDDING_DIM } = require('../../src/etl/embedders/openaiEmbedder');
-const {
-  upsertEmbeddings,
-  resetCollection,
-  countCollection,
-  COLLECTION_NAME,
-} = require('../../src/etl/loaders/chromaPlaceLoader');
+import 'dotenv/config';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { embedBatched, EMBEDDING_MODEL, EMBEDDING_DIM } from '../../src/etl/embedders/openaiEmbedder.js';
+import { upsertEmbeddings, resetCollection, countCollection, COLLECTION_NAME } from '../../src/etl/loaders/chromaPlaceLoader.js';
 
 async function main() {
   const reset = process.argv.includes('--reset');

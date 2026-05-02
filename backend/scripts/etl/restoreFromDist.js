@@ -11,17 +11,12 @@
  *   node scripts/etl/restoreFromDist.js --reset-chroma   # 컬렉션 비우고 재적재
  */
 
-require('dotenv').config();
-const { readFileSync, existsSync } = require('node:fs');
-const path = require('node:path');
-const { upsertPlaceRows } = require('../../src/etl/loaders/postgresPlaceLoader');
-const {
-  upsertEmbeddings,
-  resetCollection,
-  countCollection,
-  COLLECTION_NAME,
-} = require('../../src/etl/loaders/chromaPlaceLoader');
-const pool = require('../../src/config/db');
+import 'dotenv/config';
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import { upsertPlaceRows } from '../../src/etl/loaders/postgresPlaceLoader.js';
+import { upsertEmbeddings, resetCollection, countCollection, COLLECTION_NAME } from '../../src/etl/loaders/chromaPlaceLoader.js';
+import pool from '../../src/config/db.js';
 
 const DIST_DIR = 'data/dist';
 

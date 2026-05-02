@@ -1,6 +1,6 @@
-const { Router } = require('express');
-const authMiddleware = require('../middleware/auth');
-const { recommend } = require('../services/recommendService');
+import { Router } from 'express';
+import authMiddleware from '../middleware/auth.js';
+import { recommend } from '../services/recommendService.js';
 
 const router = Router();
 
@@ -20,4 +20,4 @@ router.post('/', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

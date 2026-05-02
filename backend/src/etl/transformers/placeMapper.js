@@ -18,7 +18,7 @@
  *   tour_content_type_id VARCHAR
  */
 
-const { stripHtml } = require('./atmosphereBuilder');
+import { stripHtml } from './atmosphereBuilder.js';
 
 /**
  * cat3 코드 → 한국어 카테고리.
@@ -141,13 +141,16 @@ function mapToPlaceRow(record, atmosphereText) {
   const common = record.common || {};
   const intro = record.intro || {};
 
-  const contentTypeId = String(list.contenttypeid || common.contenttypeid || '');
-  const cat3 = common.cat3 || list.cat3 || '';
-  const outdoor = isOutdoor(cat3, contentTypeId);
+  const contentTypeId = String(list.contenttypeid || common.contenttypeid || '') || null;
+  const cat3 = common.cat3 || list.cat3 || null;
+  const sigunguCode = toNum(list.sigungucode || common.sigungucode);
+  const outdoor = isOutdoor(cat3 || '', contentTypeId || '');
 
   return {
     tour_content_id: String(list.contentid || common.contentid || ''),
-    tour_content_type_id: contentTypeId,
+    contenttypeid: contentTypeId,
+    cat3,
+    sigungucode: sigunguCode,
     name: list.title || common.title || '',
     category: mapCategory(cat3, contentTypeId),
     address: list.addr1 || common.addr1 || '',
@@ -161,9 +164,7 @@ function mapToPlaceRow(record, atmosphereText) {
   };
 }
 
-module.exports = {
-  mapToPlaceRow,
+export { mapToPlaceRow,
   mapCategory,
   isOutdoor,
-  parseHours,
-};
+  parseHours, };

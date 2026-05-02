@@ -1,14 +1,17 @@
-require('dotenv').config();
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import errorHandler from './src/middleware/errorHandler.js';
 
-const express = require('express');
-const cors = require('cors');
-const errorHandler = require('./src/middleware/errorHandler');
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const authRoutes = require('./src/routes/auth');
-const sessionRoutes = require('./src/routes/session');
-const chatRoutes = require('./src/routes/chat');
-const emotionRoutes = require('./src/routes/emotion');
-const recommendRoutes = require('./src/routes/recommend');
+import authRoutes from './src/routes/auth.js';
+import sessionRoutes from './src/routes/session.js';
+import chatRoutes from './src/routes/chat.js';
+import emotionRoutes from './src/routes/emotion.js';
+import recommendRoutes from './src/routes/recommend.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +31,9 @@ app.use('/api/session', sessionRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/emotion', emotionRoutes);
 app.use('/api/recommend', recommendRoutes);
+
+// 테스트용 웹 UI (브라우저에서 풀 흐름 검증)
+app.use('/', express.static(join(__dirname, 'public')));
 
 // 에러 핸들러
 app.use(errorHandler);

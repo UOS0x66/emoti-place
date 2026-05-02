@@ -1,7 +1,9 @@
-const { ChromaClient } = require('chromadb');
+import { ChromaClient } from 'chromadb';
 
 const chroma = new ChromaClient({
-  path: process.env.CHROMA_URL || 'http://localhost:8000',
+  host: process.env.CHROMA_HOST || 'localhost',
+  port: Number(process.env.CHROMA_PORT || 8000),
+  ssl: false,
 });
 
-module.exports = chroma;
+export default chroma;

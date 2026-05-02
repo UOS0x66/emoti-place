@@ -1,6 +1,6 @@
-const { Router } = require('express');
-const authMiddleware = require('../middleware/auth');
-const { streamChat } = require('../services/chatService');
+import { Router } from 'express';
+import authMiddleware from '../middleware/auth.js';
+import { streamChat } from '../services/chatService.js';
 
 const router = Router();
 
@@ -19,4 +19,4 @@ router.post('/message', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

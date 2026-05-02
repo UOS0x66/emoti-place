@@ -6,9 +6,9 @@
  *   node scripts/etl/runEtl.js --sigungu=11 --reset-chroma
  */
 
-require('dotenv').config();
-const { spawn } = require('node:child_process');
-const path = require('node:path');
+import 'dotenv/config';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 function run(scriptName, args) {
   return new Promise((resolve, reject) => {

@@ -1,6 +1,6 @@
-const { Router } = require('express');
-const authMiddleware = require('../middleware/auth');
-const { getEmotions } = require('../services/emotionService');
+import { Router } from 'express';
+import authMiddleware from '../middleware/auth.js';
+import { getEmotions } from '../services/emotionService.js';
 
 const router = Router();
 
@@ -14,4 +14,4 @@ router.get('/:session_id', authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

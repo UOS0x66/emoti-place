@@ -6,7 +6,7 @@
  *   node scripts/etl/migrate.js
  */
 
-const pool = require('../../config/db');
+import pool from '../../config/db.js';
 
 async function upsertPlaceRows(rows) {
   if (rows.length === 0) return [];
@@ -17,8 +17,8 @@ async function upsertPlaceRows(rows) {
       INSERT INTO place
         (name, category, address, lat, lng, operating_hours, photos,
          atmosphere_text, max_group_size, is_outdoor,
-         tour_content_id, tour_content_type_id, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+         tour_content_id, contenttypeid, cat3, sigungucode, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
       ON CONFLICT (tour_content_id) DO UPDATE SET
         name             = EXCLUDED.name,
         category         = EXCLUDED.category,
@@ -30,6 +30,9 @@ async function upsertPlaceRows(rows) {
         atmosphere_text  = EXCLUDED.atmosphere_text,
         max_group_size   = EXCLUDED.max_group_size,
         is_outdoor       = EXCLUDED.is_outdoor,
+        contenttypeid    = EXCLUDED.contenttypeid,
+        cat3             = EXCLUDED.cat3,
+        sigungucode      = EXCLUDED.sigungucode,
         updated_at       = NOW()
       RETURNING place_id, tour_content_id
       `,
@@ -45,7 +48,9 @@ async function upsertPlaceRows(rows) {
         r.max_group_size,
         !!r.is_outdoor,
         r.tour_content_id,
-        r.tour_content_type_id,
+        r.contenttypeid,
+        r.cat3,
+        r.sigungucode,
       ]
     );
     ids.push(result.rows[0]);
@@ -53,4 +58,4 @@ async function upsertPlaceRows(rows) {
   return ids;
 }
 
-module.exports = { upsertPlaceRows };
+export { upsertPlaceRows };
