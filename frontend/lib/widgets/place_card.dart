@@ -4,6 +4,7 @@ class PlaceCard extends StatelessWidget {
   final String name;
   final String category;
   final String address;
+  final String? photoUrl;
   final String? atmosphereText;
   final String? operatingHours;
   final int? maxGroupSize;
@@ -17,6 +18,7 @@ class PlaceCard extends StatelessWidget {
     required this.name,
     required this.category,
     required this.address,
+    this.photoUrl,
     this.atmosphereText,
     this.operatingHours,
     this.maxGroupSize,
@@ -25,6 +27,49 @@ class PlaceCard extends StatelessWidget {
     required this.accentColor,
     this.onMapTap,
   });
+
+  Widget _buildPhotoArea() {
+    final placeholder = Container(
+      decoration: const BoxDecoration(color: Color(0xFF2A2A2A)),
+      child: Center(
+        child: Icon(
+          isOutdoor ? Icons.park_outlined : Icons.store_outlined,
+          size: 48,
+          color: accentColor.withValues(alpha: 0.5),
+        ),
+      ),
+    );
+
+    final url = photoUrl;
+    final imageWidget = (url != null && url.isNotEmpty)
+        ? Image.network(
+            url,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: 140,
+            errorBuilder: (_, __, ___) => placeholder,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                color: const Color(0xFF2A2A2A),
+                alignment: Alignment.center,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: accentColor.withValues(alpha: 0.5),
+                ),
+              );
+            },
+          )
+        : placeholder;
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(16),
+        topRight: Radius.circular(16),
+      ),
+      child: SizedBox(height: 140, width: double.infinity, child: imageWidget),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,24 +89,8 @@ class PlaceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 사진 플레이스홀더
-          Container(
-            height: 140,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-            ),
-            child: Center(
-              child: Icon(
-                isOutdoor ? Icons.park_outlined : Icons.store_outlined,
-                size: 48,
-                color: accentColor.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
+          // 사진 (없거나 로드 실패 시 카테고리 아이콘 플레이스홀더)
+          _buildPhotoArea(),
 
           Padding(
             padding: const EdgeInsets.all(14),

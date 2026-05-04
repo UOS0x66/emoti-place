@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS place (
   operating_hours JSONB,
   photos TEXT[] DEFAULT '{}',
   atmosphere_text TEXT,
+  summary_text VARCHAR(200),
   max_group_size INTEGER,
   is_outdoor BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -85,6 +86,7 @@ ALTER TABLE place ADD COLUMN IF NOT EXISTS tour_content_id VARCHAR(50);
 ALTER TABLE place ADD COLUMN IF NOT EXISTS contenttypeid VARCHAR(10);
 ALTER TABLE place ADD COLUMN IF NOT EXISTS cat3 VARCHAR(20);
 ALTER TABLE place ADD COLUMN IF NOT EXISTS sigungucode INTEGER;
+ALTER TABLE place ADD COLUMN IF NOT EXISTS summary_text VARCHAR(200);
 DO $$
 BEGIN
   IF NOT EXISTS (

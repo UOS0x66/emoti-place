@@ -133,10 +133,11 @@ function toNum(v) {
 
 /**
  * @param {Object} record { list, common, intro, info }
- * @param {string} atmosphereText - atmosphereBuilder가 만든 문장
+ * @param {string} atmosphereText - atmosphereBuilder가 만든 문장 (또는 객체 전체)
+ * @param {string} [summaryText] - 사용자 노출용 짧은 요약 (옵셔널)
  * @returns {Object} place 테이블 INSERT용 행 (+ tour_content_* 멱등키)
  */
-function mapToPlaceRow(record, atmosphereText) {
+function mapToPlaceRow(record, atmosphereText, summaryText) {
   const list = record.list || {};
   const common = record.common || {};
   const intro = record.intro || {};
@@ -159,6 +160,7 @@ function mapToPlaceRow(record, atmosphereText) {
     operating_hours: pickOperatingHours(intro, contentTypeId),
     photos: pickPhotos(list, common),
     atmosphere_text: atmosphereText,
+    summary_text: summaryText || null,
     max_group_size: pickMaxGroupSize(intro, contentTypeId, outdoor),
     is_outdoor: outdoor,
   };

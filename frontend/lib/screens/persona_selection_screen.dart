@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/api_client.dart';
+import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
@@ -35,14 +36,59 @@ class PersonaSelectionScreen extends StatelessWidget {
     ),
   ];
 
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('로그아웃', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          '로그아웃 하시겠어요?',
+          style: TextStyle(color: Color(0xFFCCCCCC)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소', style: TextStyle(color: Color(0xFF999999))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('로그아웃', style: TextStyle(color: Color(0xFFFF6B35))),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await AuthService.logout();
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF121212),
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            tooltip: '로그아웃',
+            icon: const Icon(Icons.logout, color: Color(0xFFCCCCCC), size: 22),
+            onPressed: () => _confirmLogout(context),
+          ),
+        ],
+      ),
       body: SafeArea(
+        top: false,
         child: Column(
           children: [
-            const SizedBox(height: 32),
+            const SizedBox(height: 8),
             const Text(
               '대화 상대를 선택하세요',
               style: TextStyle(

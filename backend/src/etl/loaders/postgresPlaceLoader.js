@@ -16,9 +16,9 @@ async function upsertPlaceRows(rows) {
       `
       INSERT INTO place
         (name, category, address, lat, lng, operating_hours, photos,
-         atmosphere_text, max_group_size, is_outdoor,
+         atmosphere_text, summary_text, max_group_size, is_outdoor,
          tour_content_id, contenttypeid, cat3, sigungucode, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
       ON CONFLICT (tour_content_id) DO UPDATE SET
         name             = EXCLUDED.name,
         category         = EXCLUDED.category,
@@ -28,6 +28,7 @@ async function upsertPlaceRows(rows) {
         operating_hours  = EXCLUDED.operating_hours,
         photos           = EXCLUDED.photos,
         atmosphere_text  = EXCLUDED.atmosphere_text,
+        summary_text     = EXCLUDED.summary_text,
         max_group_size   = EXCLUDED.max_group_size,
         is_outdoor       = EXCLUDED.is_outdoor,
         contenttypeid    = EXCLUDED.contenttypeid,
@@ -45,6 +46,7 @@ async function upsertPlaceRows(rows) {
         r.operating_hours ? JSON.stringify(r.operating_hours) : null,
         r.photos || [],
         r.atmosphere_text,
+        r.summary_text || null,
         r.max_group_size,
         !!r.is_outdoor,
         r.tour_content_id,

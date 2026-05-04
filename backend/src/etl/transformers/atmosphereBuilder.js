@@ -98,6 +98,58 @@ function stripHtml(s) {
     .trim();
 }
 
+/**
+ * atmosphere_text → 사용자 노출용 짧은 요약 (summary_text).
+ *
+ * 휴리스틱:
+ *  1) overview가 있으면 첫 문장(또는 두 문장)을 우선 사용 — 가장 정보 밀도가 높은 부분.
+ *  2) overview가 없을 때만 atmosphere_text 첫 의미 문장 사용 (헤더 문장은 건너뜀).
+ *  3) 결과를 최대 140자에서 컷, 너무 길면 마지막 문장 경계에서 컷 + 말줄임.
+ */
+function buildSummaryText({ overview, atmosphereText, fallbackTitle }) {
+  const cleanedOverview = stripHtml(overview || '').trim();
+  const SENTENCE_SPLIT = /(?<=[.!?。])\s+/;
+  const HEADER_REGEX = /^[\s\S]{0,40}'([^']+)'\.\s*/;
+
+  const pickFirstSentences = (text, count = 1) => {
+    if (!text) return '';
+    const sentences = text
+      .split(SENTENCE_SPLIT)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    return sentences.slice(0, count).join(' ');
+  };
+
+  let candidate = '';
+  if (cleanedOverview) {
+    candidate = pickFirstSentences(cleanedOverview, 2);
+  }
+
+  if (!candidate && atmosphereText) {
+    const stripped = atmosphereText.replace(HEADER_REGEX, '').trim();
+    candidate = pickFirstSentences(stripped, 2);
+  }
+
+  if (!candidate) {
+    return fallbackTitle ? `${fallbackTitle}.` : '';
+  }
+
+  candidate = candidate.replace(/\s+/g, ' ').trim();
+
+  const HARD_CAP = 140;
+  if (candidate.length > HARD_CAP) {
+    const truncated = candidate.slice(0, HARD_CAP);
+    const lastEnd = Math.max(
+      truncated.lastIndexOf('. '),
+      truncated.lastIndexOf('? '),
+      truncated.lastIndexOf('! ')
+    );
+    candidate = (lastEnd > 60 ? truncated.slice(0, lastEnd + 1) : truncated).trim() + '…';
+  }
+
+  return candidate;
+}
+
 function extractDistrict(addr1) {
   if (!addr1) return null;
   const guMatch = String(addr1).match(/서울특별시\s+([가-힣]+구)/);
@@ -161,14 +213,21 @@ function buildAtmosphereText(record) {
   if (overview.length >= 80) quality = 'rich';
   else if (overview.length > 0) quality = 'thin';
 
+  const summary = buildSummaryText({
+    overview,
+    atmosphereText: text,
+    fallbackTitle: title,
+  });
+
   return {
     tour_content_id: String(list.contentid || common.contentid || ''),
     tour_content_type_id: String(list.contenttypeid || common.contenttypeid || ''),
     name: title,
     atmosphere_text: text,
+    summary_text: summary,
     char_count: text.length,
     quality,
   };
 }
 
-export { buildAtmosphereText, stripHtml, CAT3_LABEL };
+export { buildAtmosphereText, buildSummaryText, stripHtml, CAT3_LABEL };

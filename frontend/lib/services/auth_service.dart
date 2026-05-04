@@ -6,11 +6,16 @@ class AuthService {
     required String email,
     required String nickname,
     required String password,
+    String? mbti,
   }) async {
-    final result = await ApiClient.post(
-      '/api/auth/signup',
-      body: {'email': email, 'nickname': nickname, 'password': password},
-    );
+    final body = <String, dynamic>{
+      'email': email,
+      'nickname': nickname,
+      'password': password,
+    };
+    if (mbti != null && mbti.isNotEmpty) body['mbti'] = mbti;
+
+    final result = await ApiClient.post('/api/auth/signup', body: body);
     await AuthStorage.save(
       token: result['token'] as String,
       userId: result['user_id'].toString(),

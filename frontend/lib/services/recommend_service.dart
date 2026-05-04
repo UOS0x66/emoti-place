@@ -10,6 +10,7 @@ class RecommendedPlace {
   final String? photo;
   final double distance;
   final String? atmosphereText;
+  final String? summaryText;
   final dynamic operatingHours;
   final int? maxGroupSize;
   final bool isOutdoor;
@@ -27,6 +28,7 @@ class RecommendedPlace {
     this.photo,
     required this.distance,
     this.atmosphereText,
+    this.summaryText,
     this.operatingHours,
     this.maxGroupSize,
     this.isOutdoor = false,
@@ -34,6 +36,9 @@ class RecommendedPlace {
     this.psychRationale,
     this.similarity = 0,
   });
+
+  /// 카드에 표시할 요약 (백엔드 summary_text 우선, 없으면 atmosphereText fallback).
+  String? get displayDescription => summaryText ?? atmosphereText;
 
   String? get operatingHoursText {
     if (operatingHours == null) return null;
@@ -56,8 +61,11 @@ class RecommendedPlace {
       lat: (json['lat'] as num).toDouble(),
       lng: (json['lng'] as num).toDouble(),
       photo: json['photo'] as String?,
-      distance: (json['distance'] as num?)?.toDouble() ?? 0,
+      distance: (json['distance'] as num?)?.toDouble()
+          ?? (json['distance_km'] as num?)?.toDouble()
+          ?? 0,
       atmosphereText: json['atmosphere_text'] as String?,
+      summaryText: json['summary_text'] as String?,
       operatingHours: json['operating_hours'],
       maxGroupSize: json['max_group_size'] as int?,
       isOutdoor: (json['is_outdoor'] ?? false) as bool,

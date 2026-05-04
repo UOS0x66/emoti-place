@@ -126,6 +126,7 @@ export async function recommend(sessionId, lat, lng) {
       photo: Array.isArray(p.photos) && p.photos.length > 0 ? p.photos[0] : null,
       distance_km: p.distance_km != null ? Math.round(p.distance_km * 100) / 100 : null,
       atmosphere_text: p.atmosphere_text,
+      summary_text: p.summary_text || null,
       operating_hours: p.operating_hours,
       max_group_size: p.max_group_size,
       is_outdoor: p.is_outdoor,
@@ -191,8 +192,23 @@ async function generatePersonaReasons(personaId, places, psychRationale) {
     }));
   }
 
+  // LLM이 response_format=json_object 강제로 인해 배열을 키로 감싸 보내는 경우가 있음.
+  // 알려진 키 후보를 먼저 시도하고, 못 찾으면 객체의 첫 배열을 자동으로 사용한다.
+  function extractReasonArray(p) {
+    if (Array.isArray(p)) return p;
+    if (p && typeof p === 'object') {
+      for (const k of ['reasons', 'items', 'places', 'results', 'recommendations', 'data']) {
+        if (Array.isArray(p[k])) return p[k];
+      }
+      for (const v of Object.values(p)) {
+        if (Array.isArray(v)) return v;
+      }
+    }
+    return [];
+  }
+
   const reasonMap = new Map();
-  const reasons = Array.isArray(parsed) ? parsed : (parsed.reasons || parsed.items || []);
+  const reasons = extractReasonArray(parsed);
   for (const r of reasons) {
     if (r && r.place_id != null) {
       reasonMap.set(String(r.place_id), r.persona_reason || '');
