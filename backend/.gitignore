@@ -3,3 +3,6 @@ node_modules/
 data/processed/
 pgdata/
 pgdata-server.log
+# 로컬에서 backend 디렉토리 안에서 chroma run 했을 때 생기는 임시 데이터.
+# 정식 데이터는 레포 루트의 chroma-data/ 사용 (SETUP.md 참고).
+chroma-data/

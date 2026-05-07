@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../services/app_storage.dart';
 import '../services/auth_storage.dart';
 import 'login_screen.dart';
+import 'onboarding_screen.dart';
 import 'persona_selection_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -49,17 +51,30 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _navigateAfterDelay() async {
-    // 스플래시 애니메이션과 토큰 확인을 병렬로 진행
+    // 스플래시 애니메이션 + 토큰/온보딩 상태를 병렬로 조회.
+    // getValidToken은 만료 토큰을 자동 정리하고 null을 반환한다.
     final results = await Future.wait([
       Future.delayed(const Duration(seconds: 3)),
-      AuthStorage.getToken(),
+      AuthStorage.getValidToken(),
+      AppStorage.isOnboardingDone(),
     ]);
     if (!mounted) return;
 
     final token = results[1] as String?;
-    final next = (token != null && token.isNotEmpty)
-        ? const PersonaSelectionScreen()
-        : const LoginScreen();
+    final onboardingDone = results[2] as bool;
+
+    // 라우팅 우선순위:
+    //   1) 온보딩을 아직 안 봤으면 무조건 온보딩으로 (1회성).
+    //   2) 유효 토큰 있으면 자동 로그인 → 페르소나 선택.
+    //   3) 아니면 로그인 화면.
+    final Widget next;
+    if (!onboardingDone) {
+      next = const OnboardingScreen();
+    } else if (token != null && token.isNotEmpty) {
+      next = const PersonaSelectionScreen();
+    } else {
+      next = const LoginScreen();
+    }
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => next),
