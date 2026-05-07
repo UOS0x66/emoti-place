@@ -12,9 +12,13 @@
 import { embedTexts } from '../etl/embedders/openaiEmbedder.js';
 import { queryByEmbedding } from '../etl/loaders/chromaLoader.js';
 
-const KEYWORD_BOOST = 0.05;
-const KEYWORD_PENALTY = 0.05;
-const DEFAULT_OVERFETCH_MULT = 6;
+// 정렬은 시맨틱 임베딩 유사도(base_similarity)만 사용한다.
+// keywords_must/avoid 는 LLM이 환경 어휘를 정리하는 디버그/투명성 용도로만 남기고,
+// 점수에는 반영하지 않는다 (편향 회피).
+//
+// overfetch 풀을 크게 잡아 카테고리 다양성 후처리(recommendService) 단계에서
+// 카페 같은 한 카테고리가 후보를 독점하는 현상을 완화한다.
+const DEFAULT_OVERFETCH_MULT = 12;
 
 /**
  * @param {Object} prescription - prescriptionGenerator 출력
@@ -65,20 +69,14 @@ export async function recommendPlaces(prescription, options = {}) {
     const baseSim = 1 - dists[i];
     const docLower = (docs[i] || '').toLowerCase();
     const titleLower = (metas[i]?.title || '').toLowerCase();
-    let boost = 0;
+    // 디버그 카운트 (점수 영향 없음)
     let mustHits = 0;
     let avoidHits = 0;
     for (const kw of must) {
-      if (docLower.includes(kw) || titleLower.includes(kw)) {
-        boost += KEYWORD_BOOST;
-        mustHits += 1;
-      }
+      if (docLower.includes(kw) || titleLower.includes(kw)) mustHits += 1;
     }
     for (const kw of avoid) {
-      if (docLower.includes(kw) || titleLower.includes(kw)) {
-        boost -= KEYWORD_PENALTY;
-        avoidHits += 1;
-      }
+      if (docLower.includes(kw) || titleLower.includes(kw)) avoidHits += 1;
     }
     return {
       id,
@@ -88,8 +86,8 @@ export async function recommendPlaces(prescription, options = {}) {
       cat3: metas[i]?.cat3 || '',
       atmosphere_text: docs[i] || '',
       base_similarity: baseSim,
-      boost,
-      score: baseSim + boost,
+      boost: 0,
+      score: baseSim, // 시맨틱 유사도만 사용
       must_hits: mustHits,
       avoid_hits: avoidHits,
     };

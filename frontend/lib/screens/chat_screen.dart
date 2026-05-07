@@ -47,8 +47,35 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _recommending = false;
 
+  /// 자동 추천 1회 정책: 사용자 메시지 5턴 도달 시 자동 트리거.
+  /// 단, 사용자가 그 전에 위치 아이콘을 눌렀거나 자동 트리거가 한 번 발생한 뒤에는
+  /// 다시 자동으로 띄우지 않는다.
+  bool _autoRecommendTriggered = false;
+  static const int _autoRecommendThreshold = 5;
+
+  String _autoRecommendIntro() {
+    if (widget.personaName.contains('조폭')) {
+      return '행님, 얘기 들어보고 좋은 데 몇 곳 추려봤습니다. 한번 보십쇼.';
+    } else if (widget.personaName.contains('로봇')) {
+      return '감정 데이터 누적 충분, 적합 장소 추천 출력 개시.';
+    } else {
+      return '아가, 듣고보니 할미가 좋은 데 몇 군데 알어. 한번 가봐.';
+    }
+  }
+
+  Future<void> _maybeAutoRecommend() async {
+    if (_autoRecommendTriggered) return;
+    final userTurnCount = _messages.where((m) => m.isUser).length;
+    if (userTurnCount < _autoRecommendThreshold) return;
+    _autoRecommendTriggered = true;
+    _addPersonaMessage(_autoRecommendIntro());
+    await _requestRecommendation();
+  }
+
   Future<void> _requestRecommendation({bool refresh = false}) async {
     if (_recommending) return;
+    // 사용자가 명시적으로 추천을 받은 시점에도 자동 트리거 비활성화.
+    _autoRecommendTriggered = true;
     setState(() => _recommending = true);
 
     try {
@@ -149,6 +176,11 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+
+    // 응답 스트림 종료 후 자동 추천 트리거 검토.
+    if (mounted) {
+      await _maybeAutoRecommend();
     }
   }
 

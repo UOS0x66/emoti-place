@@ -87,8 +87,37 @@ export async function recommend(sessionId, lat, lng) {
     : enriched.filter((p) => p.distance_km == null || p.distance_km <= 10);
   if (filtered.length === 0) filtered = enriched;
 
+  // chroma_score 내림차순 정렬 후 카테고리 다양성 적용.
+  // 같은 카테고리가 최대 2개까지만 상위 결과에 들어가도록 라운드-로빈식으로 픽.
+  // 분산 후 5개를 못 채우면(카테고리 풀이 너무 좁음) overflow에서 점수순으로 보충.
   filtered.sort((a, b) => (b.chroma_score ?? 0) - (a.chroma_score ?? 0));
-  const top = filtered.slice(0, 5);
+  const TOP_N = 5;
+  const PER_CATEGORY_LIMIT = 2;
+  const top = [];
+  const overflow = [];
+  const categoryCount = new Map();
+  for (const p of filtered) {
+    // 다양성 키는 PG의 세밀한 category를 우선 (카페 vs 음식점 vs 주점 분리).
+    // category_label은 contenttypeid 4개로 너무 거칠어 모두 같은 그룹으로 묶임.
+    const cat = p.category || p.category_label || '기타';
+    const c = categoryCount.get(cat) || 0;
+    if (c < PER_CATEGORY_LIMIT && top.length < TOP_N) {
+      top.push(p);
+      categoryCount.set(cat, c + 1);
+    } else {
+      overflow.push(p);
+    }
+  }
+  // overflow에서도 카테고리 max 2 강제 — 편향(카페 등 한 카테고리 쏠림) 완전 차단.
+  // candidates 풀이 좁아 5개를 못 채우면 그대로 더 적은 결과를 반환한다.
+  for (const p of overflow) {
+    if (top.length >= TOP_N) break;
+    const cat = p.category || p.category_label || '기타';
+    const c = categoryCount.get(cat) || 0;
+    if (c >= PER_CATEGORY_LIMIT) continue;
+    top.push(p);
+    categoryCount.set(cat, c + 1);
+  }
 
   const placesWithReasons = await generatePersonaReasons(
     session.persona_id,
@@ -119,7 +148,9 @@ export async function recommend(sessionId, lat, lng) {
       place_id: p.place_id,
       tour_content_id: p.tour_content_id,
       name: p.name,
-      category: p.category_label || p.category,
+      // 응답 카테고리도 더 세밀한 PG category 우선 (카페/음식점/주점 분리).
+      // category_label은 contenttypeid 4개 그룹이라 사용자에게 보여지는 분류로는 거침.
+      category: p.category || p.category_label,
       address: p.address,
       lat: p.lat,
       lng: p.lng,

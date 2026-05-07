@@ -83,11 +83,22 @@ function dominantEmotions(scores) {
   return dom.map(([k, v]) => ({ emotion: k, score: v }));
 }
 
+// 긍정 정서가 우세하면 RAG 쿼리에 회복 이론(SRT/ART/BA) 어휘를 넣지 않는다.
+// 그렇지 않으면 joy/anticipation 케이스에도 stress_recovery 청크가 빨려들어와
+// LLM이 referenced_theories 에 SRT/ART 를 잘못 넣게 된다.
+function isPositiveDominant(scores) {
+  const pos = (scores.joy || 0) + (scores.anticipation || 0) + (scores.trust || 0);
+  const neg =
+    (scores.sadness || 0) + (scores.fear || 0) + (scores.anger || 0) + (scores.disgust || 0);
+  return pos >= 0.5 && pos > neg;
+}
+
 async function retrieveRagContext(scores, topK) {
   const dom = dominantEmotions(scores);
-  const queryText = `Environments, activities, and psychological strategies that help with ${dom
-    .map((d) => `${d.emotion} (${d.score.toFixed(2)})`)
-    .join(' and ')}. Restorative environments, social connection, behavioral activation, emotion regulation.`;
+  const domStr = dom.map((d) => `${d.emotion} (${d.score.toFixed(2)})`).join(' and ');
+  const queryText = isPositiveDominant(scores)
+    ? `Environments, activities, and psychological strategies that help SAVOR and SHARE positive feelings of ${domStr}. Savoring, capitalization, positive event sharing, social connection, celebratory and lively environments.`
+    : `Environments, activities, and psychological strategies that help with ${domStr}. Restorative environments, social connection, behavioral activation, emotion regulation.`;
 
   const [emb] = await embedTexts([queryText]);
   const result = await queryByEmbedding(emb, {
@@ -155,15 +166,62 @@ ${buildMbtiGuide(mbti)}
 
 prescription_text의 이미지와 category_hint/keywords_must는 **같은 방향**을 가리켜야 합니다.
 
+[중요: 카테고리 다양성 / 카페 편향 회피]
+- prescription_text에 "카페", "식당", "음식점", "주점" 같은 카테고리 명사를 **직접 호명하지 마세요.**
+  대신 그 환경의 속성(조용함·자연광·고즈넉함·소담한 분위기·열린 시야·나무 향·잔잔한 음악 등)으로 묘사하세요.
+- "쉬고 싶다 / 차분하게 있고 싶다 / 위로받고 싶다" 같은 막연한 휴식·회복 욕구를 곧바로 카페로 매핑하지 마세요.
+  Kaplan ART와 Ulrich SRT가 가리키는 회복 환경의 풀에는 카페 외에도 도서관, 책방, 정원, 공원, 한옥/전통 공간,
+  미술관, 전망대, 강가·산책로, 작은 박물관, 기도실, 명상 공간 등 다양한 후보가 있습니다.
+  사용자 발화에 음료·식사·맛 키워드가 명시되지 않았다면 카페·음식점 외 후보를 우선 고려하세요.
+- keywords_must 에는 "카페", "음식점" 같은 카테고리명을 넣지 마세요.
+  대신 형용사·환경 어휘 (예: "조용한", "고즈넉한", "한적한", "햇살", "나무", "자연광", "전통", "소담", "열린", "빛")를 쓰세요.
+- category_hint 는 사용자 발화에 명확히 매핑되는 단서가 있을 때만 채우세요:
+  · 39(음식점): 식사·메뉴·맛·허기·술자리 등 음식 관련 욕구가 명시
+  · 28(레포츠): 운동·움직임·체험·액티비티 욕구
+  · 14(문화시설): 전시·공연·문화 체험 욕구
+  · 12(관광지): 풍경·산책·둘러보기 욕구
+  · 그 외 막연한 회복 욕구 → 빈 문자열("")로 두어 다양한 카테고리에 매칭되게 합니다.
+
 [참고 심리학 컨텍스트]
 ${ragContext}
 
 [감정→이론 가이드]
+- joy/anticipation/trust 우세 (긍정 정서) → 활기·축하·공유·소셜 환경.
+  · **stress_recovery_theory, attention_restoration_theory, behavioral_activation 사용 금지** — 이 세 이론은 부정 정서·정신적 피로·우울을 위한 회복/활성화 이론으로, 긍정 정서엔 부적합.
+  · 사용 가능: gross_emotion_regulation 의 "savoring/capitalization(긍정 정서를 의식적으로 음미·공유해 증폭)" 측면.
+  · prescription_text 도 "회복/평온/조용" 어휘 대신 "활기·생동감·함께·공유·자랑·축하·기념" 어휘로 작성.
 - sadness 강함 → behavioral_activation, comfort_food_belonging
-- fear/anger/stress 강함 → stress_recovery_theory
-- 정신적 피로 → attention_restoration_theory
-- 외로움 → comfort_food_belonging
-- 감정 전반 조절 → gross_emotion_regulation`;
+  ※ comfort_food_belonging 은 사용자가 음식 욕구를 직접 표현했을 때만 적용. 일반적 슬픔/지침에는 ART·BA를 우선.
+- fear/anger/stress 강함 → stress_recovery_theory (자연 요소가 핵심)
+- 정신적 피로 → attention_restoration_theory (Soft Fascination)
+- 외로움 → comfort_food_belonging *또는* 사람의 온기가 느껴지는 공동 공간 (반드시 음식점 아님)
+- 감정 전반 조절 → gross_emotion_regulation
+
+[잘못된 이론 매핑 회피 — 긍정 정서에 회복 이론 적용 금지]
+나쁜 예시 — joy 0.6, anticipation 0.4 (긍정 우세)에 SRT/ART 매핑:
+  referenced_theories: ["stress_recovery_theory", "attention_restoration_theory"]
+  prescription_text: "조용한 정원에서 자연을 느끼며 마음을 가라앉혀..."
+  ← 스트레스나 정신적 피로가 없는데 회복/평온 이미지를 처방. 잘못됨.
+좋은 예시 — joy 0.6, anticipation 0.4 (긍정 우세):
+  referenced_theories: ["gross_emotion_regulation"]
+  prescription_text: "친구들과 함께 기분을 마음껏 즐길 수 있는 활기찬 공간, 사진으로 남기고 싶은 분위기와 생동감 있는 풍경이 어우러진 곳"
+  keywords_must: ["활기", "생동감", "함께", "풍경"]
+
+[좋은 처방 / 나쁜 처방 예시]
+나쁜 예시 — 모든 부정 정서에 카페 매핑:
+  prescription_text: "조용하고 따뜻한 카페에서 차 한 잔 하며 마음을 정리..."
+  keywords_must: ["카페", "조용", "따뜻"]
+  category_hint: "39"
+
+좋은 예시 — 환경 속성 중심, 카테고리 미고정:
+  prescription_text: "햇살이 깊게 드는 고즈넉한 실내, 나무 가구와 잔잔한 향이 있는 공간에서 혼자 시간을 보낼 수 있는 곳"
+  keywords_must: ["고즈넉", "햇살", "나무", "조용"]
+  category_hint: ""
+
+좋은 예시 — 사용자가 직접 "차 마시고 싶다" 표현한 경우만:
+  prescription_text: "..."
+  keywords_must: ["차", "조용", "햇살"]
+  category_hint: "39"`;
 }
 
 function formatHistory(history) {
