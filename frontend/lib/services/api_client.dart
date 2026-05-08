@@ -46,6 +46,22 @@ class ApiClient {
     }
   }
 
+  static Future<dynamic> delete(String path, {bool withAuth = false}) async {
+    final url = '$_baseUrl$path';
+    developer.log('DELETE $url', name: 'ApiClient');
+    try {
+      final response = await http.delete(
+        Uri.parse(url),
+        headers: await _headers(withAuth: withAuth),
+      );
+      developer.log('DELETE $url -> ${response.statusCode}', name: 'ApiClient');
+      return _handleResponse(response);
+    } catch (e, st) {
+      developer.log('DELETE $url FAILED: $e', name: 'ApiClient', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
   static Future<dynamic> get(String path, {bool withAuth = false}) async {
     final url = '$_baseUrl$path';
     developer.log('GET $url', name: 'ApiClient');

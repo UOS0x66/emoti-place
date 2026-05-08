@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/chat_service.dart';
 import '../services/recommend_service.dart';
+import '../services/feedback_service.dart';
 import '../widgets/place_card.dart';
 import 'map_screen.dart';
 
@@ -46,6 +47,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _sending = false;
   bool _recommending = false;
+  Personalization _personalization = Personalization.empty;
+  // place_id → 사용자가 누른 평점. ListView 가 카드 위젯을 dispose/recreate 해도
+  // 이 맵은 화면 state 라 살아있어, 스크롤 후에도 ♡/✕ 하이라이트가 유지된다.
+  final Map<int, PlaceRating?> _placeRatings = {};
 
   /// 자동 추천 1회 정책: 사용자 메시지 5턴 도달 시 자동 트리거.
   /// 단, 사용자가 그 전에 위치 아이콘을 눌렀거나 자동 트리거가 한 번 발생한 뒤에는
@@ -85,7 +90,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
 
-      final places = refresh
+      final result = refresh
           ? await RecommendService.refresh(
               sessionId: widget.sessionId,
               lat: position.latitude,
@@ -98,7 +103,8 @@ class _ChatScreenState extends State<ChatScreen> {
             );
 
       if (!mounted) return;
-      if (places.isEmpty) {
+      if (result.places.isEmpty) {
+        setState(() => _personalization = result.personalization);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('추천할 장소를 찾지 못했습니다.'),
@@ -109,9 +115,10 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       setState(() {
+        _personalization = result.personalization;
         // 기존 refresh 트리거 제거
         _messages.removeWhere((m) => m.isRefreshTrigger);
-        for (final place in places) {
+        for (final place in result.places) {
           _messages.add(_ChatMessage(text: '', isUser: false, place: place));
         }
         // 새 refresh 트리거 추가
@@ -268,38 +275,55 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (message.isRefreshTrigger) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Center(
-                      child: OutlinedButton.icon(
-                        onPressed: _recommending
-                            ? null
-                            : () => _requestRecommendation(refresh: true),
-                        icon: _recommending
-                            ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: widget.accentColor,
-                                ),
-                              )
-                            : Icon(Icons.refresh, size: 18, color: widget.accentColor),
-                        label: Text(
-                          '다른 장소 추천 받기',
-                          style: TextStyle(color: widget.accentColor),
+                    child: Column(
+                      children: [
+                        Center(
+                          child: OutlinedButton.icon(
+                            onPressed: _recommending
+                                ? null
+                                : () => _requestRecommendation(refresh: true),
+                            icon: _recommending
+                                ? SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: widget.accentColor,
+                                    ),
+                                  )
+                                : Icon(Icons.refresh, size: 18, color: widget.accentColor),
+                            label: Text(
+                              '다른 장소 추천 받기',
+                              style: TextStyle(color: widget.accentColor),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: widget.accentColor.withValues(alpha: 0.5),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                            color: widget.accentColor.withValues(alpha: 0.5),
+                        if (_personalization.nLikes > 0 ||
+                            _personalization.excludedDislikes > 0) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            '맞춤 학습 중 · LIKE ${_personalization.nLikes}개'
+                            ' · 반영도 ${(_personalization.prefAlpha * 100).round()}%'
+                            '${_personalization.excludedDislikes > 0 ? ' · 제외 ${_personalization.excludedDislikes}' : ''}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF888888),
+                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
+                        ],
+                      ],
                     ),
                   );
                 }
@@ -318,6 +342,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       isOutdoor: place.isOutdoor,
                       personaReason: place.reason,
                       accentColor: widget.accentColor,
+                      rating: _placeRatings[place.placeId],
                       onMapTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -329,6 +354,33 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                         );
+                      },
+                      onRatingChanged: (newRating) async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final prev = _placeRatings[place.placeId];
+                        // 옵티미스틱 업데이트 — 부모 state 가 source of truth.
+                        setState(() => _placeRatings[place.placeId] = newRating);
+                        try {
+                          if (newRating == null) {
+                            await FeedbackService.clear(placeId: place.placeId);
+                          } else {
+                            await FeedbackService.rate(
+                              placeId: place.placeId,
+                              rating: newRating,
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() => _placeRatings[place.placeId] = prev);
+                          }
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('피드백 저장 실패: $e'),
+                              backgroundColor: const Color(0xFF333333),
+                            ),
+                          );
+                          rethrow;
+                        }
                       },
                     ),
                   );

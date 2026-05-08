@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS recommendation (
   psych_rationale TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 사용자 장소 피드백 (개인화 추천 — LIKE 임베딩 평균을 선호 벡터로 사용)
+CREATE TABLE IF NOT EXISTS user_place_feedback (
+  user_id UUID NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
+  place_id INTEGER NOT NULL REFERENCES place(place_id) ON DELETE CASCADE,
+  rating VARCHAR(10) NOT NULL CHECK (rating IN ('LIKE', 'DISLIKE')),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, place_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_place_feedback_user_rating
+  ON user_place_feedback(user_id, rating);
 `;
 
 async function main() {

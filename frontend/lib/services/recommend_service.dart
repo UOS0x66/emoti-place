@@ -76,8 +76,38 @@ class RecommendedPlace {
   }
 }
 
+/// 이번 추천에 적용된 개인화 상태. 사용자가 LIKE 누적할수록 pref_alpha 가 0→0.5 로 상승.
+class Personalization {
+  final int nLikes;
+  final double prefAlpha;
+  final int excludedDislikes;
+
+  const Personalization({
+    required this.nLikes,
+    required this.prefAlpha,
+    required this.excludedDislikes,
+  });
+
+  static const empty = Personalization(nLikes: 0, prefAlpha: 0, excludedDislikes: 0);
+
+  factory Personalization.fromJson(Map<String, dynamic> json) {
+    return Personalization(
+      nLikes: (json['n_likes'] as num?)?.toInt() ?? 0,
+      prefAlpha: (json['pref_alpha'] as num?)?.toDouble() ?? 0,
+      excludedDislikes: (json['excluded_dislikes'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class RecommendResult {
+  final List<RecommendedPlace> places;
+  final Personalization personalization;
+
+  const RecommendResult({required this.places, required this.personalization});
+}
+
 class RecommendService {
-  static Future<List<RecommendedPlace>> fetch({
+  static Future<RecommendResult> fetch({
     required String sessionId,
     required double lat,
     required double lng,
@@ -88,7 +118,12 @@ class RecommendService {
       withAuth: true,
     );
     final list = (result['places'] as List).cast<Map<String, dynamic>>();
-    return list.map(RecommendedPlace.fromJson).toList();
+    final places = list.map(RecommendedPlace.fromJson).toList();
+    final personalization = result['personalization'] is Map
+        ? Personalization.fromJson(
+            (result['personalization'] as Map).cast<String, dynamic>())
+        : Personalization.empty;
+    return RecommendResult(places: places, personalization: personalization);
   }
 
   /// 같은 세션에 대해 다음 배치의 추천 장소를 받아온다.
@@ -96,7 +131,7 @@ class RecommendService {
   /// 현재 백엔드에 정식 `/api/recommend/refresh`가 구현되기 전까지는
   /// `/api/recommend`를 재호출하여 임시 대응한다. 감정/처방은 세션에 캐시되어
   /// 있으므로 Stage 3(벡터 검색 + 필터)만 재실행되어 결과가 달라질 수 있다.
-  static Future<List<RecommendedPlace>> refresh({
+  static Future<RecommendResult> refresh({
     required String sessionId,
     required double lat,
     required double lng,

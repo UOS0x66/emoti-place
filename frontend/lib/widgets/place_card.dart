@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import '../services/feedback_service.dart';
 
-class PlaceCard extends StatelessWidget {
+/// 카드에서 사용자가 누른 평점. null = 미평가.
+typedef RatingCallback = Future<void> Function(PlaceRating? newRating);
+
+class PlaceCard extends StatefulWidget {
   final String name;
   final String category;
   final String address;
@@ -12,6 +16,10 @@ class PlaceCard extends StatelessWidget {
   final String? personaReason;
   final Color accentColor;
   final VoidCallback? onMapTap;
+  final RatingCallback? onRatingChanged;
+  // 부모가 보유하는 평점 — ListView 가 카드 위젯을 destroy/recreate 해도 부모 state 는 살아있다.
+  // 그래서 카드 자체는 이걸 읽기만 하고, 변경은 onRatingChanged 콜백으로 위임한다.
+  final PlaceRating? rating;
 
   const PlaceCard({
     super.key,
@@ -26,21 +34,44 @@ class PlaceCard extends StatelessWidget {
     this.personaReason,
     required this.accentColor,
     this.onMapTap,
+    this.onRatingChanged,
+    this.rating,
   });
+
+  @override
+  State<PlaceCard> createState() => _PlaceCardState();
+}
+
+class _PlaceCardState extends State<PlaceCard> {
+  // 진행 중 표시만 로컬 — 네트워크 요청 중에 같은 버튼을 다시 못 누르도록.
+  // 그러나 화면 밖으로 스크롤되어 State 가 destroy 되면 자연히 사라지고,
+  // 결과 자체는 부모 state 에 반영되므로 다시 그릴 때 정확한 상태로 보인다.
+  bool _ratingBusy = false;
+
+  Future<void> _toggle(PlaceRating tapped) async {
+    if (_ratingBusy || widget.onRatingChanged == null) return;
+    final next = widget.rating == tapped ? null : tapped; // 같은 버튼 다시 누르면 해제
+    setState(() => _ratingBusy = true);
+    try {
+      await widget.onRatingChanged!(next);
+    } finally {
+      if (mounted) setState(() => _ratingBusy = false);
+    }
+  }
 
   Widget _buildPhotoArea() {
     final placeholder = Container(
       decoration: const BoxDecoration(color: Color(0xFF2A2A2A)),
       child: Center(
         child: Icon(
-          isOutdoor ? Icons.park_outlined : Icons.store_outlined,
+          widget.isOutdoor ? Icons.park_outlined : Icons.store_outlined,
           size: 48,
-          color: accentColor.withValues(alpha: 0.5),
+          color: widget.accentColor.withValues(alpha: 0.5),
         ),
       ),
     );
 
-    final url = photoUrl;
+    final url = widget.photoUrl;
     final imageWidget = (url != null && url.isNotEmpty)
         ? Image.network(
             url,
@@ -55,7 +86,7 @@ class PlaceCard extends StatelessWidget {
                 alignment: Alignment.center,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: accentColor.withValues(alpha: 0.5),
+                  color: widget.accentColor.withValues(alpha: 0.5),
                 ),
               );
             },
@@ -71,6 +102,45 @@ class PlaceCard extends StatelessWidget {
     );
   }
 
+  Widget _buildRatingRow() {
+    if (widget.onRatingChanged == null) return const SizedBox.shrink();
+    final liked = widget.rating == PlaceRating.like;
+    final disliked = widget.rating == PlaceRating.dislike;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          _RatingButton(
+            icon: liked ? Icons.thumb_up : Icons.thumb_up_outlined,
+            label: '좋아요',
+            active: liked,
+            activeColor: widget.accentColor,
+            onTap: _ratingBusy ? null : () => _toggle(PlaceRating.like),
+          ),
+          const SizedBox(width: 8),
+          _RatingButton(
+            icon: disliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+            label: '싫어요',
+            active: disliked,
+            activeColor: const Color(0xFFE57373),
+            onTap: _ratingBusy ? null : () => _toggle(PlaceRating.dislike),
+          ),
+          if (_ratingBusy) ...[
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: widget.accentColor.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -82,7 +152,7 @@ class PlaceCard extends StatelessWidget {
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: accentColor.withValues(alpha: 0.3),
+          color: widget.accentColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -99,53 +169,53 @@ class PlaceCard extends StatelessWidget {
               children: [
                 // 장소명
                 Text(
-                  name,
+                  widget.name,
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: accentColor,
+                    color: widget.accentColor,
                   ),
                 ),
                 const SizedBox(height: 8),
 
                 // 카테고리
-                _InfoRow(icon: Icons.label_outline, text: category),
+                _InfoRow(icon: Icons.label_outline, text: widget.category),
                 const SizedBox(height: 4),
 
                 // 주소
-                _InfoRow(icon: Icons.place_outlined, text: address),
+                _InfoRow(icon: Icons.place_outlined, text: widget.address),
 
                 // 영업시간
-                if (operatingHours != null) ...[
+                if (widget.operatingHours != null) ...[
                   const SizedBox(height: 4),
-                  _InfoRow(icon: Icons.access_time, text: operatingHours!),
+                  _InfoRow(icon: Icons.access_time, text: widget.operatingHours!),
                 ],
 
                 // 최대 인원
-                if (maxGroupSize != null) ...[
+                if (widget.maxGroupSize != null) ...[
                   const SizedBox(height: 4),
-                  _InfoRow(icon: Icons.group_outlined, text: '최대 $maxGroupSize명'),
+                  _InfoRow(icon: Icons.group_outlined, text: '최대 ${widget.maxGroupSize}명'),
                 ],
 
                 // 실내/실외
                 const SizedBox(height: 4),
                 _InfoRow(
-                  icon: isOutdoor ? Icons.wb_sunny_outlined : Icons.roofing,
-                  text: isOutdoor ? '실외' : '실내',
+                  icon: widget.isOutdoor ? Icons.wb_sunny_outlined : Icons.roofing,
+                  text: widget.isOutdoor ? '실외' : '실내',
                 ),
 
                 // 분위기
-                if (atmosphereText != null) ...[
+                if (widget.atmosphereText != null) ...[
                   const SizedBox(height: 10),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.08),
+                      color: widget.accentColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '"$atmosphereText"',
+                      '"${widget.atmosphereText}"',
                       style: const TextStyle(
                         fontSize: 13,
                         fontStyle: FontStyle.italic,
@@ -157,10 +227,10 @@ class PlaceCard extends StatelessWidget {
                 ],
 
                 // 페르소나 추천 사유
-                if (personaReason != null) ...[
+                if (widget.personaReason != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    personaReason!,
+                    widget.personaReason!,
                     style: const TextStyle(
                       fontSize: 13,
                       color: Color(0xFF999999),
@@ -169,17 +239,20 @@ class PlaceCard extends StatelessWidget {
                   ),
                 ],
 
+                // LIKE / DISLIKE 토글
+                _buildRatingRow(),
+
                 // 지도 버튼
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: onMapTap,
+                    onPressed: widget.onMapTap,
                     icon: const Icon(Icons.map_outlined, size: 18),
                     label: const Text('지도에서 보기'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: accentColor,
-                      side: BorderSide(color: accentColor.withValues(alpha: 0.5)),
+                      foregroundColor: widget.accentColor,
+                      side: BorderSide(color: widget.accentColor.withValues(alpha: 0.5)),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -191,6 +264,51 @@ class PlaceCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RatingButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final Color activeColor;
+  final VoidCallback? onTap;
+
+  const _RatingButton({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.activeColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? activeColor : const Color(0xFF888888);
+    final border = active ? activeColor.withValues(alpha: 0.6) : const Color(0xFF333333);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: border, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: fg),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
       ),
     );
   }

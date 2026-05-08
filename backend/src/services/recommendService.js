@@ -16,8 +16,9 @@ import pool from '../config/db.js';
 import { getSession, updateSession } from './sessionService.js';
 import { extractEmotions } from './emotionService.js';
 import { generatePrescription } from './prescriptionService.js';
-import { recommendPlaces } from '../llm/placeRecommender.js';
+import { recommendPlaces, computePreferenceAlpha } from '../llm/placeRecommender.js';
 import { buildReasonPrompt } from '../prompts/reason.js';
+import { buildUserPreference } from './feedbackService.js';
 import { haversineKm } from '../utils/geo.js';
 
 const REASON_MODEL = process.env.REASON_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini';
@@ -35,8 +36,19 @@ export async function recommend(sessionId, lat, lng) {
     psych_rationale: prescription.psych_rationale,
   });
 
-  const candidates = await recommendPlaces(prescription, { nResults: 10 });
-  if (candidates.length === 0) return emptyResult(emotionScores, prescription);
+  const pref = await buildUserPreference(session.user_id);
+  const personalization = {
+    n_likes: pref.nLikes,
+    pref_alpha: computePreferenceAlpha(pref.nLikes),
+    excluded_dislikes: pref.dislikedTourIds.length,
+  };
+  const candidates = await recommendPlaces(prescription, {
+    nResults: 10,
+    preferenceVector: pref.preferenceVector,
+    nLikes: pref.nLikes,
+    excludeIds: pref.dislikedTourIds,
+  });
+  if (candidates.length === 0) return emptyResult(emotionScores, prescription, personalization);
 
   // Chroma의 contentid → PG의 tour_content_id 매핑
   const tourIds = candidates.map((c) => String(c.id));
@@ -176,10 +188,11 @@ export async function recommend(sessionId, lat, lng) {
       keywords_avoid: prescription.keywords_avoid,
       mbti_signals_applied: prescription.mbti_signals_applied,
     },
+    personalization,
   };
 }
 
-function emptyResult(scores, prescription) {
+function emptyResult(scores, prescription, personalization) {
   return {
     places: [],
     emotion_scores: scores,
@@ -192,6 +205,7 @@ function emptyResult(scores, prescription) {
       keywords_avoid: prescription.keywords_avoid,
       mbti_signals_applied: prescription.mbti_signals_applied,
     },
+    personalization: personalization || { n_likes: 0, pref_alpha: 0, excluded_dislikes: 0 },
   };
 }
 
