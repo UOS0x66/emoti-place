@@ -4,8 +4,10 @@ import 'package:geolocator/geolocator.dart';
 import '../services/chat_service.dart';
 import '../services/recommend_service.dart';
 import '../services/feedback_service.dart';
+import '../services/saved_place_service.dart';
 import '../widgets/place_card.dart';
 import 'map_screen.dart';
+import 'saved_places_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String sessionId;
@@ -51,6 +53,8 @@ class _ChatScreenState extends State<ChatScreen> {
   // place_id → 사용자가 누른 평점. ListView 가 카드 위젯을 dispose/recreate 해도
   // 이 맵은 화면 state 라 살아있어, 스크롤 후에도 ♡/✕ 하이라이트가 유지된다.
   final Map<int, PlaceRating?> _placeRatings = {};
+  // place_id → 보관함 저장 여부. 같은 이유로 화면 state 에 둔다.
+  final Set<int> _savedPlaceIds = {};
 
   /// 자동 추천 1회 정책: 사용자 메시지 5턴 도달 시 자동 트리거.
   /// 단, 사용자가 그 전에 위치 아이콘을 눌렀거나 자동 트리거가 한 번 발생한 뒤에는
@@ -65,6 +69,17 @@ class _ChatScreenState extends State<ChatScreen> {
       return '감정 데이터 누적 충분, 적합 장소 추천 출력 개시.';
     } else {
       return '아가, 듣고보니 할미가 좋은 데 몇 군데 알어. 한번 가봐.';
+    }
+  }
+
+  /// 3km 안에 추천할 장소가 없을 때 페르소나 톤으로 알려주는 멘트.
+  String _tooFarMessage() {
+    if (widget.personaName.contains('조폭')) {
+      return '행님, 죄송합니다. 지금 행님 계신 데서 3km 안에는 제가 봐둔 데가 없습니다. 다른 동네에서 다시 찾아보시지요.';
+    } else if (widget.personaName.contains('로봇')) {
+      return '위치 분석 완료. 반경 3km 내 매칭 장소 0건. 본 시스템, 추천 출력 불가. 위치 이동, 권장.';
+    } else {
+      return '아이고 아가, 시방 너 있는 데 근처에는 할미가 아는 곳이 없네. 좀 떨어진 동네 가서 다시 한번 봐줘봐라.';
     }
   }
 
@@ -105,12 +120,18 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       if (result.places.isEmpty) {
         setState(() => _personalization = result.personalization);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('추천할 장소를 찾지 못했습니다.'),
-            backgroundColor: Color(0xFF333333),
-          ),
-        );
+        // 3km 밖이라 비었으면 페르소나 멘트를 채팅에 띄운다.
+        // 다른 사유(Chroma 후보 0 등)는 기존 스낵바로 폴백.
+        if (result.emptyReason == 'too_far') {
+          _addPersonaMessage(_tooFarMessage());
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('추천할 장소를 찾지 못했습니다.'),
+              backgroundColor: Color(0xFF333333),
+            ),
+          );
+        }
         return;
       }
 
@@ -247,6 +268,19 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: '내 보관함',
+            icon: Icon(Icons.bookmark_outline, color: widget.accentColor),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SavedPlacesScreen(
+                    accentColor: widget.accentColor,
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
             tooltip: '장소 추천 받기',
             icon: _recommending
                 ? SizedBox(
@@ -342,7 +376,47 @@ class _ChatScreenState extends State<ChatScreen> {
                       isOutdoor: place.isOutdoor,
                       personaReason: place.reason,
                       accentColor: widget.accentColor,
+                      distanceKm: place.distance > 0 ? place.distance : null,
                       rating: _placeRatings[place.placeId],
+                      saved: _savedPlaceIds.contains(place.placeId),
+                      onSavedChanged: (nextSaved) async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final wasSaved = _savedPlaceIds.contains(place.placeId);
+                        setState(() {
+                          if (nextSaved) {
+                            _savedPlaceIds.add(place.placeId);
+                          } else {
+                            _savedPlaceIds.remove(place.placeId);
+                          }
+                        });
+                        try {
+                          if (nextSaved) {
+                            await SavedPlaceService.save(
+                              placeId: place.placeId,
+                              personaReason: place.reason,
+                            );
+                          } else {
+                            await SavedPlaceService.unsave(placeId: place.placeId);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() {
+                              if (wasSaved) {
+                                _savedPlaceIds.add(place.placeId);
+                              } else {
+                                _savedPlaceIds.remove(place.placeId);
+                              }
+                            });
+                          }
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('보관 처리 실패: $e'),
+                              backgroundColor: const Color(0xFF333333),
+                            ),
+                          );
+                          rethrow;
+                        }
+                      },
                       onMapTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(

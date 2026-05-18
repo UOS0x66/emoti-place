@@ -130,6 +130,17 @@ CREATE TABLE IF NOT EXISTS user_place_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_user_place_feedback_user_rating
   ON user_place_feedback(user_id, rating);
+
+-- 사용자 보관함 (계정별로 추천 받은 장소 모아두기)
+CREATE TABLE IF NOT EXISTS user_saved_place (
+  user_id UUID NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
+  place_id INTEGER NOT NULL REFERENCES place(place_id) ON DELETE CASCADE,
+  persona_reason TEXT,
+  saved_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, place_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_saved_place_user_saved
+  ON user_saved_place(user_id, saved_at DESC);
 `;
 
 async function main() {

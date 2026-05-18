@@ -102,8 +102,14 @@ class Personalization {
 class RecommendResult {
   final List<RecommendedPlace> places;
   final Personalization personalization;
+  // 백엔드가 빈 결과를 반환한 사유. 'too_far' = 3km 밖만 있음. 'no_candidates' = Chroma 후보 0.
+  final String? emptyReason;
 
-  const RecommendResult({required this.places, required this.personalization});
+  const RecommendResult({
+    required this.places,
+    required this.personalization,
+    this.emptyReason,
+  });
 }
 
 class RecommendService {
@@ -123,7 +129,11 @@ class RecommendService {
         ? Personalization.fromJson(
             (result['personalization'] as Map).cast<String, dynamic>())
         : Personalization.empty;
-    return RecommendResult(places: places, personalization: personalization);
+    return RecommendResult(
+      places: places,
+      personalization: personalization,
+      emptyReason: result['empty_reason'] as String?,
+    );
   }
 
   /// 같은 세션에 대해 다음 배치의 추천 장소를 받아온다.

@@ -6,7 +6,7 @@
  *   2) Stage 1: extractEmotions(sessionId)
  *   3) Stage 2: generatePrescription(sessionId) — user.mbti 자동 조회
  *   4) Stage 3: recommendPlaces(prescription) — Chroma + 키워드 부스트
- *   5) PG place join + GPS 거리 필터 (5km, 부족시 10km)
+ *   5) PG place join + GPS 거리 필터 (3km 엄격 — fallback 없음, 비면 빈 결과)
  *   6) 페르소나 말투의 추천 사유 생성 (reason.js)
  *   7) recommendation 이력 저장 + 응답
  */
@@ -92,12 +92,22 @@ export async function recommend(sessionId, lat, lng) {
     };
   });
 
-  // GPS 5km 필터, 부족하면 10km, 좌표 없는 건 통과
-  const within5 = enriched.filter((p) => p.distance_km == null || p.distance_km <= 5);
-  let filtered = within5.length >= 3
-    ? within5
-    : enriched.filter((p) => p.distance_km == null || p.distance_km <= 10);
-  if (filtered.length === 0) filtered = enriched;
+  // GPS 3km 엄격 필터 — 3km 밖은 결과가 비더라도 절대 추천하지 않는다.
+  // 좌표가 없는 장소는 거리 판정이 불가하므로 그대로 통과시킨다.
+  const distancesForLog = enriched
+    .map((p) => p.distance_km)
+    .filter((d) => d != null)
+    .map((d) => d.toFixed(2));
+  console.log(
+    `[recommend] user(${lat.toFixed(5)},${lng.toFixed(5)}) candidates=${enriched.length} distances_km=[${distancesForLog.join(', ')}]`
+  );
+  const filtered = enriched.filter((p) => p.distance_km == null || p.distance_km <= 3);
+  const dropped = enriched.length - filtered.length;
+  if (dropped > 0) console.log(`[recommend] 3km 필터: ${dropped}개 장소 제외 (>3km)`);
+  if (filtered.length === 0) {
+    console.log(`[recommend] 3km 안에 추천할 장소 없음 → 빈 결과 반환`);
+    return emptyResult(emotionScores, prescription, personalization, 'too_far');
+  }
 
   // chroma_score 내림차순 정렬 후 카테고리 다양성 적용.
   // 같은 카테고리가 최대 2개까지만 상위 결과에 들어가도록 라운드-로빈식으로 픽.
@@ -192,9 +202,10 @@ export async function recommend(sessionId, lat, lng) {
   };
 }
 
-function emptyResult(scores, prescription, personalization) {
+function emptyResult(scores, prescription, personalization, emptyReason = 'no_candidates') {
   return {
     places: [],
+    empty_reason: emptyReason, // 'too_far' | 'no_candidates'
     emotion_scores: scores,
     prescription: {
       prescription_text: prescription.prescription_text,

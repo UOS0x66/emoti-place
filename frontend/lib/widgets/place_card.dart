@@ -4,6 +4,9 @@ import '../services/feedback_service.dart';
 /// 카드에서 사용자가 누른 평점. null = 미평가.
 typedef RatingCallback = Future<void> Function(PlaceRating? newRating);
 
+/// 보관함 토글 콜백. 새 상태 (true = 보관, false = 해제) 가 전달된다.
+typedef SavedCallback = Future<void> Function(bool nextSaved);
+
 class PlaceCard extends StatefulWidget {
   final String name;
   final String category;
@@ -15,11 +18,15 @@ class PlaceCard extends StatefulWidget {
   final bool isOutdoor;
   final String? personaReason;
   final Color accentColor;
+  final double? distanceKm;
   final VoidCallback? onMapTap;
   final RatingCallback? onRatingChanged;
   // 부모가 보유하는 평점 — ListView 가 카드 위젯을 destroy/recreate 해도 부모 state 는 살아있다.
   // 그래서 카드 자체는 이걸 읽기만 하고, 변경은 onRatingChanged 콜백으로 위임한다.
   final PlaceRating? rating;
+  // 보관함 상태 (부모 state 가 source of truth).
+  final bool saved;
+  final SavedCallback? onSavedChanged;
 
   const PlaceCard({
     super.key,
@@ -33,9 +40,12 @@ class PlaceCard extends StatefulWidget {
     this.isOutdoor = false,
     this.personaReason,
     required this.accentColor,
+    this.distanceKm,
     this.onMapTap,
     this.onRatingChanged,
     this.rating,
+    this.saved = false,
+    this.onSavedChanged,
   });
 
   @override
@@ -47,6 +57,8 @@ class _PlaceCardState extends State<PlaceCard> {
   // 그러나 화면 밖으로 스크롤되어 State 가 destroy 되면 자연히 사라지고,
   // 결과 자체는 부모 state 에 반영되므로 다시 그릴 때 정확한 상태로 보인다.
   bool _ratingBusy = false;
+  bool _savedBusy = false;
+  bool _descExpanded = false;
 
   Future<void> _toggle(PlaceRating tapped) async {
     if (_ratingBusy || widget.onRatingChanged == null) return;
@@ -57,6 +69,21 @@ class _PlaceCardState extends State<PlaceCard> {
     } finally {
       if (mounted) setState(() => _ratingBusy = false);
     }
+  }
+
+  Future<void> _toggleSaved() async {
+    if (_savedBusy || widget.onSavedChanged == null) return;
+    setState(() => _savedBusy = true);
+    try {
+      await widget.onSavedChanged!(!widget.saved);
+    } finally {
+      if (mounted) setState(() => _savedBusy = false);
+    }
+  }
+
+  String _formatDistance(double km) {
+    if (km < 1) return '${(km * 1000).round()}m';
+    return '${km.toStringAsFixed(1)}km';
   }
 
   Widget _buildPhotoArea() {
@@ -141,6 +168,108 @@ class _PlaceCardState extends State<PlaceCard> {
     );
   }
 
+  Widget _buildDescription() {
+    final text = widget.atmosphereText;
+    if (text == null || text.isEmpty) return const SizedBox.shrink();
+    final canCollapse = text.length > 30; // 30자 미만이면 토글 없이 그냥 1줄로 끝.
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: widget.accentColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '"$text"',
+              maxLines: _descExpanded ? null : 1,
+              overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+                color: Color(0xFFBBBBBB),
+                height: 1.4,
+              ),
+            ),
+            if (canCollapse)
+              GestureDetector(
+                onTap: () => setState(() => _descExpanded = !_descExpanded),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Text(
+                        _descExpanded ? '간단히' : '자세히',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: widget.accentColor.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      Icon(
+                        _descExpanded ? Icons.expand_less : Icons.expand_more,
+                        size: 16,
+                        color: widget.accentColor.withValues(alpha: 0.9),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final saveBtn = widget.onSavedChanged == null
+        ? null
+        : IconButton(
+            onPressed: _savedBusy ? null : _toggleSaved,
+            tooltip: widget.saved ? '보관함에서 빼기' : '보관함에 저장',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            icon: _savedBusy
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: widget.accentColor.withValues(alpha: 0.7),
+                    ),
+                  )
+                : Icon(
+                    widget.saved ? Icons.bookmark : Icons.bookmark_border,
+                    size: 22,
+                    color: widget.saved
+                        ? widget.accentColor
+                        : const Color(0xFF888888),
+                  ),
+          );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            widget.name,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: widget.accentColor,
+            ),
+          ),
+        ),
+        ?saveBtn,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -167,15 +296,8 @@ class _PlaceCardState extends State<PlaceCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 장소명
-                Text(
-                  widget.name,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: widget.accentColor,
-                  ),
-                ),
+                // 장소명 + 북마크
+                _buildHeader(),
                 const SizedBox(height: 8),
 
                 // 카테고리
@@ -184,6 +306,15 @@ class _PlaceCardState extends State<PlaceCard> {
 
                 // 주소
                 _InfoRow(icon: Icons.place_outlined, text: widget.address),
+
+                // 거리 (현재 내 위치 기준)
+                if (widget.distanceKm != null) ...[
+                  const SizedBox(height: 4),
+                  _InfoRow(
+                    icon: Icons.directions_walk,
+                    text: '내 위치에서 ${_formatDistance(widget.distanceKm!)}',
+                  ),
+                ],
 
                 // 영업시간
                 if (widget.operatingHours != null) ...[
@@ -204,27 +335,8 @@ class _PlaceCardState extends State<PlaceCard> {
                   text: widget.isOutdoor ? '실외' : '실내',
                 ),
 
-                // 분위기
-                if (widget.atmosphereText != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: widget.accentColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '"${widget.atmosphereText}"',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
-                        color: Color(0xFFBBBBBB),
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
+                // 분위기 (1줄 + 토글로 펼치기)
+                _buildDescription(),
 
                 // 페르소나 추천 사유
                 if (widget.personaReason != null) ...[
