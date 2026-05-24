@@ -58,6 +58,9 @@ function buildDynamicHint(history, userMessage, personaId) {
   const realBotTurns = history.filter((m, i) => m.role === 'assistant' && i > 0).length;
   const isFirstTurn = realBotTurns === 0;
 
+  // ★ 모든 응답에 적용되는 최상위 가이드 — 재미 1순위
+  hints.push('이번 응답에 드립·과장·놀림·딴소리 중 하나 이상 반드시 박아라. 정중한 위로/상담 톤 금지. 캐릭터로 빵 터지게 받아쳐라.');
+
   // 직전 봇 응답 분석 (그리팅은 제외 — index 0)
   const lastBot = history.length > 1
     ? [...history.slice(1)].reverse().find((m) => m.role === 'assistant')
@@ -68,29 +71,28 @@ function buildDynamicHint(history, userMessage, personaId) {
       hints.push(`직전 응답에서 추임새 "${used}" 사용했음. 이번엔 반드시 다른 추임새로.`);
     }
     if (isAngryTone(lastBot.content)) {
-      hints.push('직전 응답이 격분/세상욕 톤이었음. 이번엔 격분 톤 자제하고 디테일 파고들기 또는 차분 모드로.');
+      hints.push('직전 응답이 격분 톤이었음. 이번엔 변주 — 과장 충정/잔소리/시스템 농담/딴소리 같은 다른 코미디 결로 가라.');
     }
   }
 
   // 사용자 메시지 분석 — 메타 외마디는 첫 턴이 아닐 때만 적용
   if (!isFirstTurn && isShortMetaUtterance(userMessage)) {
-    hints.push('사용자가 짧은 외마디/의문문을 던졌음. 직전 자기 응답에 대한 의문·당혹일 가능성. 새로 격분/감정 톤 만들지 말고, 살짝 톤 다운해서 페르소나 캐릭터로 가볍게 받아쳐라.');
+    hints.push('사용자가 짧은 외마디/의문문 던졌음. 직전 자기 응답에 대한 당혹일 가능성. 톤 다운해서 캐릭터로 가볍게 받아쳐라 (예: "행님, 제가 말이 좀 셌습니까" / "어유 아가 할미가 셌나" / *"응답 톤 과잉, 감지."*).');
   }
 
   if (isRecommendationRequest(userMessage)) {
-    hints.push('사용자가 추천을 직접 요구함. 짧게 "따로 정리해드리겠다" 식으로 받고, 곧장 사용자 감정·상황으로 돌아와 한 마디 더 받아쳐라. 추가 질문 금지.');
+    hints.push('사용자가 추천 직접 요구. 짧게 "따로 정리해드릴게" 식으로 받고, 곧장 캐릭터 코미디 한 줄로 받아쳐라. 추가 질문 금지.');
   }
 
   if (isCasualTone(userMessage) && (userMessage || '').trim().length < 20) {
-    hints.push('사용자 톤이 가볍거나 일상적임. 무겁게 끌고 가지 말고, 페르소나 색깔로 짧고 가볍게 받아라.');
+    hints.push('사용자 톤 가볍거나 일상적. 무겁게 끌고 가지 말고 짧고 빵 터지게.');
   }
 
-  // 응답 카운트로 변주 강화 (실제 대화 3턴 이상부터 변주 압력)
+  // 응답 카운트로 변주 강화
   if (realBotTurns >= 3) {
-    hints.push('대화가 누적됐음. 같은 톤 반복하지 말고 이번엔 의식적으로 어휘·문장 구조를 새로 빚어라.');
+    hints.push('대화 누적됨. 같은 톤·어휘 반복 X, 캐릭터의 새로운 결(과장·잔소리·인간미 누출 등)을 끄집어내라.');
   }
 
-  if (hints.length === 0) return null;
   return '[이번 턴 가이드 — 반드시 반영]\n' + hints.map((h, i) => `${i + 1}. ${h}`).join('\n');
 }
 
@@ -145,10 +147,10 @@ async function streamChat(sessionId, userMessage, res) {
       model: LLM_MODEL,
       messages,
       stream: true,
-      temperature: 0.85,
+      temperature: 1.0,
       max_tokens: 400,
-      frequency_penalty: 0.4,
-      presence_penalty: 0.3,
+      frequency_penalty: 0.5,
+      presence_penalty: 0.5,
     });
 
     for await (const chunk of stream) {
