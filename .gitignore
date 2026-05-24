@@ -2,3 +2,6 @@
 .vscode/
 frontend/.env
 backend/scripts/*.log
+backend/*.log
+backend/data/raw-failed-429/
+backend/data/raw-existing-backup/
