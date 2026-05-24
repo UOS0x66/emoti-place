@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Emoti-Place 채팅 테스트</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #1a1e26; --line: #2a313d;
+    --text: #e7ecf3; --mute: #8b95a7; --accent: #5b8def;
+    --bot: #232a36; --user: #2b4a86;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 14px/1.5 "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  header .status { font-size: 12px; color: var(--mute); margin-left: auto; }
+  .personas { padding: 16px; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .persona-chip {
+    padding: 10px 16px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; cursor: pointer; transition: all .15s;
+  }
+  .persona-chip:hover { border-color: var(--accent); }
+  .persona-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .persona-chip.disabled { opacity: .4; cursor: not-allowed; }
+  #log {
+    flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 75%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user); }
+  .msg.bot { align-self: flex-start; background: var(--bot); }
+  .msg.bot em { font-style: italic; opacity: .9; }
+  .msg .meta { font-size: 10px; color: var(--mute); margin-top: 4px; }
+  .typing { color: var(--mute); font-size: 12px; font-style: italic; }
+  footer {
+    border-top: 1px solid var(--line); padding: 12px; display: flex; gap: 8px; background: var(--card);
+  }
+  #input {
+    flex: 1; padding: 10px 14px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; font-size: 14px; outline: none;
+  }
+  #input:focus { border-color: var(--accent); }
+  button {
+    padding: 10px 20px; background: var(--accent); color: white; border: none;
+    border-radius: 10px; cursor: pointer; font-size: 14px;
+  }
+  button:disabled { background: #3a4250; cursor: not-allowed; }
+  .reset-btn { background: transparent; color: var(--mute); font-size: 12px; }
+  .reset-btn:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Emoti-Place 채팅 — 페르소나 톤 검증</h1>
+  <span class="status" id="status">초기화 중...</span>
+  <button class="reset-btn" id="reset">새 세션</button>
+</header>
+
+<div class="personas" id="personas"></div>
+
+<div id="log"></div>
+
+<footer>
+  <input id="input" placeholder="메시지를 입력하세요 (Enter)" autocomplete="off" disabled />
+  <button id="send" disabled>전송</button>
+</footer>
+
+<script>
+const API = '/api';
+let token = null;
+let sessionId = null;
+let personaId = null;
+
+const $log = document.getElementById('log');
+const $input = document.getElementById('input');
+const $send = document.getElementById('send');
+const $status = document.getElementById('status');
+const $personas = document.getElementById('personas');
+const $reset = document.getElementById('reset');
+
+function setStatus(t) { $status.textContent = t; }
+
+function addMsg(role, text, meta='') {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  if (meta) {
+    const m = document.createElement('div');
+    m.className = 'meta';
+    m.textContent = meta;
+    div.appendChild(m);
+  }
+  $log.appendChild(div);
+  $log.scrollTop = $log.scrollHeight;
+  return div;
+}
+
+function clearLog() { $log.innerHTML = ''; }
+
+async function ensureAuth() {
+  if (token) return token;
+  // 매번 새 익명 계정 생성 (테스트 편의)
+  const rand = Math.random().toString(36).slice(2, 10);
+  const body = {
+    email: `test_${rand}@local.dev`,
+    nickname: `tester_${rand}`,
+    password: 'test1234',
+  };
+  let r = await fetch(API + '/auth/signup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error('signup 실패: ' + r.status);
+  const data = await r.json();
+  token = data.token;
+  return token;
+}
+
+async function createSession(pid) {
+  const r = await fetch(API + '/session/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ persona_id: pid }),
+  });
+  if (!r.ok) throw new Error('session 생성 실패: ' + r.status);
+  return await r.json();
+}
+
+async function loadPersonas() {
+  const r = await fetch(API + '/session/personas');
+  const list = await r.json();
+  $personas.innerHTML = '';
+  for (const p of list) {
+    const btn = document.createElement('div');
+    btn.className = 'persona-chip';
+    btn.textContent = `${p.persona_id}. ${p.name}`;
+    btn.onclick = () => selectPersona(p.persona_id, p.name);
+    $personas.appendChild(btn);
+  }
+}
+
+async function selectPersona(pid, name) {
+  setStatus('세션 생성 중...');
+  try {
+    await ensureAuth();
+    const res = await createSession(pid);
+    sessionId = res.session_id;
+    personaId = pid;
+    clearLog();
+    addMsg('bot', res.greeting_message, name);
+    [...document.querySelectorAll('.persona-chip')].forEach((c, i) => {
+      c.classList.toggle('active', i + 1 === pid || c.textContent.startsWith(pid + '.'));
+    });
+    $input.disabled = false;
+    $send.disabled = false;
+    $input.focus();
+    setStatus(`✅ ${name} | 세션 ${sessionId.slice(0, 8)}`);
+  } catch (e) {
+    setStatus('❌ ' + e.message);
+  }
+}
+
+async function sendMessage() {
+  const text = $input.value.trim();
+  if (!text || !sessionId) return;
+  addMsg('user', text);
+  $input.value = '';
+  $input.disabled = true;
+  $send.disabled = true;
+
+  const botDiv = addMsg('bot', '');
+  botDiv.classList.add('typing');
+
+  try {
+    const r = await fetch(API + '/chat/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ session_id: sessionId, message: text }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let acc = '';
+    botDiv.classList.remove('typing');
+    botDiv.textContent = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const payload = JSON.parse(line.slice(6));
+          if (payload.token) {
+            acc += payload.token;
+            botDiv.textContent = acc;
+            $log.scrollTop = $log.scrollHeight;
+          } else if (payload.error) {
+            botDiv.textContent = '[에러] ' + payload.error;
+          }
+        } catch {}
+      }
+    }
+  } catch (e) {
+    botDiv.textContent = '[전송 실패] ' + e.message;
+  } finally {
+    $input.disabled = false;
+    $send.disabled = false;
+    $input.focus();
+  }
+}
+
+$send.onclick = sendMessage;
+$input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+$reset.onclick = () => {
+  if (!confirm('새 세션을 시작합니다 (토큰/대화 초기화)')) return;
+  token = null; sessionId = null; personaId = null;
+  clearLog();
+  $input.disabled = true; $send.disabled = true;
+  setStatus('페르소나를 선택하세요');
+  document.querySelectorAll('.persona-chip').forEach(c => c.classList.remove('active'));
+};
+
+(async () => {
+  await loadPersonas();
+  setStatus('페르소나를 선택하세요');
+})();
+</script>
+</body>
+</html>
