@@ -1,6 +1,5 @@
 import openai from '../config/openai.js';
 import PERSONAS from '../prompts/personas.js';
-import FEWSHOT from '../prompts/fewshotExamples.js';
 import { getSession, updateSession } from './sessionService.js';
 
 const MAX_HISTORY = 20;
@@ -55,8 +54,14 @@ function isCasualTone(text) {
 function buildDynamicHint(history, userMessage, personaId) {
   const hints = [];
 
-  // 직전 봇 응답 분석
-  const lastBot = [...history].reverse().find((m) => m.role === 'assistant');
+  // 실제 대화 턴 수 (그리팅만 있는 첫 메시지면 0턴)
+  const realBotTurns = history.filter((m, i) => m.role === 'assistant' && i > 0).length;
+  const isFirstTurn = realBotTurns === 0;
+
+  // 직전 봇 응답 분석 (그리팅은 제외 — index 0)
+  const lastBot = history.length > 1
+    ? [...history.slice(1)].reverse().find((m) => m.role === 'assistant')
+    : null;
   if (lastBot) {
     const used = detectInterjection(lastBot.content, personaId);
     if (used) {
@@ -67,9 +72,9 @@ function buildDynamicHint(history, userMessage, personaId) {
     }
   }
 
-  // 사용자 메시지 분석
-  if (isShortMetaUtterance(userMessage)) {
-    hints.push('사용자가 짧은 외마디/의문문을 던졌음. 직전 자기 응답에 대한 의문·당혹일 가능성. 새로 격분/감정 톤 만들지 말고, 살짝 톤 다운해서 페르소나 캐릭터로 가볍게 받아쳐라. (예: "행님, 제가 말이 좀 셌습니까" / "어유 아가 할미가 말이 셌나" / *"응답 톤 과잉, 감지."*)');
+  // 사용자 메시지 분석 — 메타 외마디는 첫 턴이 아닐 때만 적용
+  if (!isFirstTurn && isShortMetaUtterance(userMessage)) {
+    hints.push('사용자가 짧은 외마디/의문문을 던졌음. 직전 자기 응답에 대한 의문·당혹일 가능성. 새로 격분/감정 톤 만들지 말고, 살짝 톤 다운해서 페르소나 캐릭터로 가볍게 받아쳐라.');
   }
 
   if (isRecommendationRequest(userMessage)) {
@@ -80,9 +85,8 @@ function buildDynamicHint(history, userMessage, personaId) {
     hints.push('사용자 톤이 가볍거나 일상적임. 무겁게 끌고 가지 말고, 페르소나 색깔로 짧고 가볍게 받아라.');
   }
 
-  // 응답 카운트로 변주 강화 (3턴 이상부터 변주 압력)
-  const botTurns = history.filter((m) => m.role === 'assistant').length;
-  if (botTurns >= 3) {
+  // 응답 카운트로 변주 강화 (실제 대화 3턴 이상부터 변주 압력)
+  if (realBotTurns >= 3) {
     hints.push('대화가 누적됐음. 같은 톤 반복하지 말고 이번엔 의식적으로 어휘·문장 구조를 새로 빚어라.');
   }
 
@@ -95,15 +99,11 @@ function buildDynamicHint(history, userMessage, personaId) {
 // ─────────────────────────────────────────────────────────────
 
 function composeMessages(persona, personaId, history, userMessage) {
-  const fewshot = FEWSHOT[personaId] || [];
   const hint = buildDynamicHint(history, userMessage, personaId);
 
   const messages = [
     { role: 'system', content: persona.system_prompt },
-    // 그리팅(history[0]은 보통 그리팅)을 fewshot 뒤에 두기 위해, history는 그대로 두고 fewshot을 system 다음에 박는다.
-    // fewshot은 패턴 학습용 (실제 대화 아님) — chat-completions는 명시 구분이 없어서 그냥 일반 메시지로 들어감.
-    ...fewshot,
-    // 그리팅 + 실제 대화 히스토리
+    // 그리팅 + 실제 대화 히스토리만 (few-shot 없음 — LLM이 무관한 맥락에도 베끼는 부작용 회피)
     ...history.slice(-MAX_HISTORY).filter((m) => m.role !== 'user' || m.content !== userMessage),
   ];
 
