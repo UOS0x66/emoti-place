@@ -58,9 +58,13 @@ export async function recommend(sessionId, lat, lng) {
   );
   const byTourId = new Map(dbResult.rows.map((r) => [String(r.tour_content_id), r]));
 
-  const enriched = candidates.map((c) => {
-    const pg = byTourId.get(String(c.id));
-    if (pg) {
+  // PG 매칭 없거나 좌표 없는 후보는 응답에서 제외한다.
+  // 이런 후보를 응답에 포함하면 (a) 프론트가 place_id/lat/lng 를 non-null 로 cast 하다 깨지고
+  // (b) 카드 정보(주소·좌표·사진)가 빈 채로 노출돼 추천 가치도 없다.
+  const enriched = candidates
+    .map((c) => {
+      const pg = byTourId.get(String(c.id));
+      if (!pg || pg.lat == null || pg.lng == null) return null;
       return {
         ...pg,
         atmosphere_text: pg.atmosphere_text || c.atmosphere_text,
@@ -68,29 +72,14 @@ export async function recommend(sessionId, lat, lng) {
         chroma_base_similarity: c.base_similarity,
         chroma_must_hits: c.must_hits,
         category_label: TYPE_LABEL[c.contenttypeid] || pg.category || '',
-        distance_km: (pg.lat != null && pg.lng != null)
-          ? haversineKm(lat, lng, Number(pg.lat), Number(pg.lng))
-          : null,
+        distance_km: haversineKm(lat, lng, Number(pg.lat), Number(pg.lng)),
       };
-    }
-    return {
-      place_id: null,
-      tour_content_id: c.id,
-      name: c.title,
-      category: c.cat3,
-      address: null,
-      lat: null,
-      lng: null,
-      operating_hours: null,
-      photos: [],
-      atmosphere_text: c.atmosphere_text,
-      chroma_score: c.score,
-      chroma_base_similarity: c.base_similarity,
-      chroma_must_hits: c.must_hits,
-      category_label: TYPE_LABEL[c.contenttypeid] || '',
-      distance_km: null,
-    };
-  });
+    })
+    .filter(Boolean);
+  const droppedNoPg = candidates.length - enriched.length;
+  if (droppedNoPg > 0) {
+    console.log(`[recommend] PG 매칭/좌표 없는 후보 ${droppedNoPg}개 제외`);
+  }
 
   // GPS 3km 엄격 필터 — 3km 밖은 결과가 비더라도 절대 추천하지 않는다.
   // 좌표가 없는 장소는 거리 판정이 불가하므로 그대로 통과시킨다.
