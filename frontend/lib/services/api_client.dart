@@ -46,6 +46,27 @@ class ApiClient {
     }
   }
 
+  static Future<dynamic> patch(
+    String path, {
+    Map<String, dynamic>? body,
+    bool withAuth = false,
+  }) async {
+    final url = '$_baseUrl$path';
+    developer.log('PATCH $url body=$body', name: 'ApiClient');
+    try {
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: await _headers(withAuth: withAuth),
+        body: body != null ? jsonEncode(body) : null,
+      );
+      developer.log('PATCH $url -> ${response.statusCode}', name: 'ApiClient');
+      return _handleResponse(response);
+    } catch (e, st) {
+      developer.log('PATCH $url FAILED: $e', name: 'ApiClient', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
   static Future<dynamic> delete(String path, {bool withAuth = false}) async {
     final url = '$_baseUrl$path';
     developer.log('DELETE $url', name: 'ApiClient');

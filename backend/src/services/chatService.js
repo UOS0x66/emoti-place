@@ -1,6 +1,6 @@
 import openai from '../config/openai.js';
 import PERSONAS from '../prompts/personas.js';
-import { getSession, updateSession } from './sessionService.js';
+import { getSession, updateSession, generateSessionTitle } from './sessionService.js';
 
 const MAX_HISTORY = 20;
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
@@ -161,7 +161,7 @@ async function streamChat(sessionId, userMessage, res) {
       }
     }
 
-    // 히스토리에 응답 추가 후 저장
+    // 히스토리에 응답 추가
     history.push({ role: 'assistant', content: fullResponse });
 
     // 히스토리 크기 제한
@@ -169,9 +169,19 @@ async function streamChat(sessionId, userMessage, res) {
       history = history.slice(-MAX_HISTORY);
     }
 
-    await updateSession(sessionId, {
+    // 메시지 카운트 증가 + 5턴 시점 타이틀 자동 생성 (feature/SessionSave)
+    const newMessageCount = (session.message_count || 0) + 1;
+    const updateData = {
       conversation_history: history,
-    });
+      message_count: newMessageCount,
+    };
+
+    const userMsgCount = history.filter((m) => m.role === 'user').length;
+    if (userMsgCount === 5 && !session.title) {
+      updateData.title = await generateSessionTitle(history);
+    }
+
+    await updateSession(sessionId, updateData);
 
     res.write(`data: ${JSON.stringify({ done: true, full_response: fullResponse })}\n\n`);
   } catch (err) {

@@ -1,28 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
+import '../data/personas.dart';
 import '../services/chat_service.dart';
 import '../services/recommend_service.dart';
 import '../services/feedback_service.dart';
 import '../services/saved_place_service.dart';
+import '../services/session_service.dart';
 import '../widgets/place_card.dart';
+import '../widgets/session_sidebar.dart';
 import 'map_screen.dart';
 import 'saved_places_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String sessionId;
   final String greetingMessage;
-  final String personaName;
-  final String personaAsset;
-  final Color accentColor;
+  final int personaId;
 
   const ChatScreen({
     super.key,
     required this.sessionId,
     required this.greetingMessage,
-    required this.personaName,
-    required this.personaAsset,
-    required this.accentColor,
+    required this.personaId,
   });
 
   @override
@@ -34,9 +33,16 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
 
+  // 현재 활성 세션과 페르소나. 사이드바에서 다른 세션을 누르면 통째로 갱신된다.
+  late String _sessionId;
+  late PersonaInfo _persona;
+  bool _loadingSession = false;
+
   @override
   void initState() {
     super.initState();
+    _sessionId = widget.sessionId;
+    _persona = personaById(widget.personaId);
     _addPersonaMessage(widget.greetingMessage);
   }
 
@@ -63,9 +69,9 @@ class _ChatScreenState extends State<ChatScreen> {
   static const int _autoRecommendThreshold = 5;
 
   String _autoRecommendIntro() {
-    if (widget.personaName.contains('조폭')) {
+    if (_persona.name.contains('조폭')) {
       return '행님, 얘기 들어보고 좋은 데 몇 곳 추려봤습니다. 한번 보십쇼.';
-    } else if (widget.personaName.contains('로봇')) {
+    } else if (_persona.name.contains('로봇')) {
       return '감정 데이터 누적 충분, 적합 장소 추천 출력 개시.';
     } else {
       return '아가, 듣고보니 할미가 좋은 데 몇 군데 알어. 한번 가봐.';
@@ -74,9 +80,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// 3km 안에 추천할 장소가 없을 때 페르소나 톤으로 알려주는 멘트.
   String _tooFarMessage() {
-    if (widget.personaName.contains('조폭')) {
+    if (_persona.name.contains('조폭')) {
       return '행님, 죄송합니다. 지금 행님 계신 데서 3km 안에는 제가 봐둔 데가 없습니다. 다른 동네에서 다시 찾아보시지요.';
-    } else if (widget.personaName.contains('로봇')) {
+    } else if (_persona.name.contains('로봇')) {
       return '위치 분석 완료. 반경 3km 내 매칭 장소 0건. 본 시스템, 추천 출력 불가. 위치 이동, 권장.';
     } else {
       return '아이고 아가, 시방 너 있는 데 근처에는 할미가 아는 곳이 없네. 좀 떨어진 동네 가서 다시 한번 봐줘봐라.';
@@ -90,6 +96,80 @@ class _ChatScreenState extends State<ChatScreen> {
     _autoRecommendTriggered = true;
     _addPersonaMessage(_autoRecommendIntro());
     await _requestRecommendation();
+  }
+
+  /// 현재 페르소나로 새 세션을 생성한 뒤 화면을 초기 상태로 리셋한다.
+  Future<void> _startNewSession() async {
+    if (_loadingSession) return;
+    setState(() => _loadingSession = true);
+    try {
+      final session = await SessionService.create(_persona.personaId);
+      if (!mounted) return;
+      setState(() {
+        _sessionId = session.sessionId;
+        _messages.clear();
+        _personalization = Personalization.empty;
+        _placeRatings.clear();
+        _savedPlaceIds.clear();
+        _autoRecommendTriggered = false;
+        _messages.add(_ChatMessage(text: session.greetingMessage, isUser: false));
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('새 대화 생성 실패: $e'),
+          backgroundColor: const Color(0xFF333333),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingSession = false);
+    }
+  }
+
+  /// 사이드바에서 선택한 세션의 히스토리를 백엔드에서 받아와 화면을 재구성한다.
+  Future<void> _resumeSession(String sessionId) async {
+    if (sessionId == _sessionId) return;
+    if (_loadingSession) return;
+    setState(() => _loadingSession = true);
+    try {
+      final detail = await SessionService.getDetail(sessionId);
+      if (!mounted) return;
+      // 페르소나가 다른 세션일 수도 있으니 함께 교체.
+      final nextPersona = personaById(detail.personaId);
+      setState(() {
+        _sessionId = detail.sessionId;
+        _persona = nextPersona;
+        _messages
+          ..clear()
+          ..addAll(detail.history.map(
+            (m) => _ChatMessage(text: m.content, isUser: m.role == 'user'),
+          ));
+        _personalization = Personalization.empty;
+        _placeRatings.clear();
+        _savedPlaceIds.clear();
+        // 이미 어느 정도 대화가 쌓인 세션이면 자동 추천을 다시 띄우지 않는다.
+        _autoRecommendTriggered =
+            _messages.where((m) => m.isUser).length >= _autoRecommendThreshold;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('대화 로드 실패: $e'),
+          backgroundColor: const Color(0xFF333333),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingSession = false);
+    }
+  }
+
+  /// 현재 세션이 사이드바에서 삭제됐을 때: 같은 페르소나로 새 세션을 자동 생성.
+  Future<void> _onCurrentSessionDeleted(String _) async {
+    await _startNewSession();
   }
 
   Future<void> _requestRecommendation({bool refresh = false}) async {
@@ -107,12 +187,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final result = refresh
           ? await RecommendService.refresh(
-              sessionId: widget.sessionId,
+              sessionId: _sessionId,
               lat: position.latitude,
               lng: position.longitude,
             )
           : await RecommendService.fetch(
-              sessionId: widget.sessionId,
+              sessionId: _sessionId,
               lat: position.latitude,
               lng: position.longitude,
             );
@@ -182,7 +262,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final stream = ChatService.streamMessage(
-        sessionId: widget.sessionId,
+        sessionId: _sessionId,
         message: text,
       );
       await for (final token in stream) {
@@ -233,16 +313,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = _persona.accentColor;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
+      drawer: SessionSidebar(
+        currentSessionId: _sessionId,
+        onNewSession: _startNewSession,
+        onSelectSession: _resumeSession,
+        onSessionDeleted: _onCurrentSessionDeleted,
+      ),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
         elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
         title: Row(
           children: [
             SizedBox(
@@ -250,18 +333,18 @@ class _ChatScreenState extends State<ChatScreen> {
               height: 32,
               child: ClipOval(
                 child: SvgPicture.asset(
-                  widget.personaAsset,
+                  _persona.asset,
                   fit: BoxFit.cover,
                 ),
               ),
             ),
             const SizedBox(width: 10),
             Text(
-              widget.personaName,
+              _persona.name,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: widget.accentColor,
+                color: accentColor,
               ),
             ),
           ],
@@ -269,12 +352,12 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           IconButton(
             tooltip: '내 보관함',
-            icon: Icon(Icons.bookmark_outline, color: widget.accentColor),
+            icon: Icon(Icons.bookmark_outline, color: accentColor),
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => SavedPlacesScreen(
-                    accentColor: widget.accentColor,
+                    accentColor: accentColor,
                   ),
                 ),
               );
@@ -288,233 +371,246 @@ class _ChatScreenState extends State<ChatScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: widget.accentColor,
+                      color: accentColor,
                     ),
                   )
-                : Icon(Icons.place_outlined, color: widget.accentColor),
+                : Icon(Icons.place_outlined, color: accentColor),
             onPressed: _recommending ? null : _requestRecommendation,
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // 채팅 메시지 영역
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                if (message.isRefreshTrigger) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      children: [
-                        Center(
-                          child: OutlinedButton.icon(
-                            onPressed: _recommending
-                                ? null
-                                : () => _requestRecommendation(refresh: true),
-                            icon: _recommending
-                                ? SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: widget.accentColor,
-                                    ),
-                                  )
-                                : Icon(Icons.refresh, size: 18, color: widget.accentColor),
-                            label: Text(
-                              '다른 장소 추천 받기',
-                              style: TextStyle(color: widget.accentColor),
+          Column(
+            children: [
+              // 채팅 메시지 영역
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final message = _messages[index];
+                    if (message.isRefreshTrigger) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          children: [
+                            Center(
+                              child: OutlinedButton.icon(
+                                onPressed: _recommending
+                                    ? null
+                                    : () => _requestRecommendation(refresh: true),
+                                icon: _recommending
+                                    ? SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: accentColor,
+                                        ),
+                                      )
+                                    : Icon(Icons.refresh, size: 18, color: accentColor),
+                                label: Text(
+                                  '다른 장소 추천 받기',
+                                  style: TextStyle(color: accentColor),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(
+                                    color: accentColor.withValues(alpha: 0.5),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
                             ),
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(
-                                color: widget.accentColor.withValues(alpha: 0.5),
+                            if (_personalization.nLikes > 0 ||
+                                _personalization.excludedDislikes > 0) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                '맞춤 학습 중 · LIKE ${_personalization.nLikes}개'
+                                ' · 반영도 ${(_personalization.prefAlpha * 100).round()}%'
+                                '${_personalization.excludedDislikes > 0 ? ' · 제외 ${_personalization.excludedDislikes}' : ''}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF888888),
+                                ),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                          ),
+                            ],
+                          ],
                         ),
-                        if (_personalization.nLikes > 0 ||
-                            _personalization.excludedDislikes > 0) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            '맞춤 학습 중 · LIKE ${_personalization.nLikes}개'
-                            ' · 반영도 ${(_personalization.prefAlpha * 100).round()}%'
-                            '${_personalization.excludedDislikes > 0 ? ' · 제외 ${_personalization.excludedDislikes}' : ''}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF888888),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                }
-                if (message.place != null) {
-                  final place = message.place!;
-                  return Align(
-                    alignment: Alignment.centerLeft,
-                    child: PlaceCard(
-                      name: place.name,
-                      category: place.category,
-                      address: place.address,
-                      photoUrl: place.photo,
-                      atmosphereText: place.displayDescription,
-                      operatingHours: place.operatingHoursText,
-                      maxGroupSize: place.maxGroupSize,
-                      isOutdoor: place.isOutdoor,
-                      personaReason: place.reason,
-                      accentColor: widget.accentColor,
-                      distanceKm: place.distance > 0 ? place.distance : null,
-                      rating: _placeRatings[place.placeId],
-                      saved: _savedPlaceIds.contains(place.placeId),
-                      onSavedChanged: (nextSaved) async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final wasSaved = _savedPlaceIds.contains(place.placeId);
-                        setState(() {
-                          if (nextSaved) {
-                            _savedPlaceIds.add(place.placeId);
-                          } else {
-                            _savedPlaceIds.remove(place.placeId);
-                          }
-                        });
-                        try {
-                          if (nextSaved) {
-                            await SavedPlaceService.save(
-                              placeId: place.placeId,
-                              personaReason: place.reason,
-                            );
-                          } else {
-                            await SavedPlaceService.unsave(placeId: place.placeId);
-                          }
-                        } catch (e) {
-                          if (mounted) {
+                      );
+                    }
+                    if (message.place != null) {
+                      final place = message.place!;
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: PlaceCard(
+                          name: place.name,
+                          category: place.category,
+                          address: place.address,
+                          photoUrl: place.photo,
+                          atmosphereText: place.displayDescription,
+                          operatingHours: place.operatingHoursText,
+                          maxGroupSize: place.maxGroupSize,
+                          isOutdoor: place.isOutdoor,
+                          personaReason: place.reason,
+                          accentColor: accentColor,
+                          distanceKm: place.distance > 0 ? place.distance : null,
+                          rating: _placeRatings[place.placeId],
+                          saved: _savedPlaceIds.contains(place.placeId),
+                          onSavedChanged: (nextSaved) async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final wasSaved = _savedPlaceIds.contains(place.placeId);
                             setState(() {
-                              if (wasSaved) {
+                              if (nextSaved) {
                                 _savedPlaceIds.add(place.placeId);
                               } else {
                                 _savedPlaceIds.remove(place.placeId);
                               }
                             });
-                          }
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('보관 처리 실패: $e'),
-                              backgroundColor: const Color(0xFF333333),
+                            try {
+                              if (nextSaved) {
+                                await SavedPlaceService.save(
+                                  placeId: place.placeId,
+                                  personaReason: place.reason,
+                                );
+                              } else {
+                                await SavedPlaceService.unsave(placeId: place.placeId);
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                setState(() {
+                                  if (wasSaved) {
+                                    _savedPlaceIds.add(place.placeId);
+                                  } else {
+                                    _savedPlaceIds.remove(place.placeId);
+                                  }
+                                });
+                              }
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('보관 처리 실패: $e'),
+                                  backgroundColor: const Color(0xFF333333),
+                                ),
+                              );
+                              rethrow;
+                            }
+                          },
+                          onMapTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => MapScreen(
+                                  placeName: place.name,
+                                  address: place.address,
+                                  lat: place.lat,
+                                  lng: place.lng,
+                                ),
+                              ),
+                            );
+                          },
+                          onRatingChanged: (newRating) async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final prev = _placeRatings[place.placeId];
+                            // 옵티미스틱 업데이트 — 부모 state 가 source of truth.
+                            setState(() => _placeRatings[place.placeId] = newRating);
+                            try {
+                              if (newRating == null) {
+                                await FeedbackService.clear(placeId: place.placeId);
+                              } else {
+                                await FeedbackService.rate(
+                                  placeId: place.placeId,
+                                  rating: newRating,
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                setState(() => _placeRatings[place.placeId] = prev);
+                              }
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('피드백 저장 실패: $e'),
+                                  backgroundColor: const Color(0xFF333333),
+                                ),
+                              );
+                              rethrow;
+                            }
+                          },
+                        ),
+                      );
+                    }
+                    return _MessageBubble(
+                      message: message,
+                      accentColor: accentColor,
+                    );
+                  },
+                ),
+              ),
+
+              // 입력 영역
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1A1A1A),
+                  border: Border(
+                    top: BorderSide(color: Color(0xFF2A2A2A), width: 1),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          style: const TextStyle(color: Colors.white, fontSize: 15),
+                          maxLines: 4,
+                          minLines: 1,
+                          decoration: InputDecoration(
+                            hintText: '메시지를 입력하세요',
+                            hintStyle: const TextStyle(color: Color(0xFF666666)),
+                            filled: true,
+                            fillColor: const Color(0xFF252525),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
                             ),
-                          );
-                          rethrow;
-                        }
-                      },
-                      onMapTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => MapScreen(
-                              placeName: place.name,
-                              address: place.address,
-                              lat: place.lat,
-                              lng: place.lng,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide.none,
                             ),
                           ),
-                        );
-                      },
-                      onRatingChanged: (newRating) async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final prev = _placeRatings[place.placeId];
-                        // 옵티미스틱 업데이트 — 부모 state 가 source of truth.
-                        setState(() => _placeRatings[place.placeId] = newRating);
-                        try {
-                          if (newRating == null) {
-                            await FeedbackService.clear(placeId: place.placeId);
-                          } else {
-                            await FeedbackService.rate(
-                              placeId: place.placeId,
-                              rating: newRating,
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            setState(() => _placeRatings[place.placeId] = prev);
-                          }
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('피드백 저장 실패: $e'),
-                              backgroundColor: const Color(0xFF333333),
-                            ),
-                          );
-                          rethrow;
-                        }
-                      },
-                    ),
-                  );
-                }
-                return _MessageBubble(
-                  message: message,
-                  accentColor: widget.accentColor,
-                );
-              },
-            ),
-          ),
-
-          // 입력 영역
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A1A1A),
-              border: Border(
-                top: BorderSide(color: Color(0xFF2A2A2A), width: 1),
-              ),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                      maxLines: 4,
-                      minLines: 1,
-                      decoration: InputDecoration(
-                        hintText: '메시지를 입력하세요',
-                        hintStyle: const TextStyle(color: Color(0xFF666666)),
-                        filled: true,
-                        fillColor: const Color(0xFF252525),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
+                          onSubmitted: (_) => _sendMessage(),
                         ),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _sendMessage,
+                        icon: Icon(
+                          Icons.send_rounded,
+                          color: accentColor,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _sendMessage,
-                    icon: Icon(
-                      Icons.send_rounded,
-                      color: widget.accentColor,
-                    ),
-                  ),
-                ],
+                ),
+              ),
+            ],
+          ),
+          if (_loadingSession)
+            Positioned.fill(
+              child: ColoredBox(
+                color: const Color(0xCC121212),
+                child: Center(
+                  child: CircularProgressIndicator(color: accentColor),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
