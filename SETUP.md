@@ -1,22 +1,16 @@
 # Emoti-Place 백엔드 셋업 가이드
 
-팀원에게 코드 + 데이터 zip 2개 + API 키 안내만 받으면 30분 안에 로컬에서 풀 흐름이 돌아갑니다.
+코드 + API 키만 있으면 30분 안에 로컬에서 풀 흐름이 돌아갑니다. 데이터(Chroma + TourAPI raw)는 repo 안에 같이 들어있어서 별도 zip 없습니다.
 
 ---
 
 ## 0. 준비물
 
-### 0.1 받을 것 (팀장에게서)
-| 항목 | 무엇 | 어디 풀지 |
-|---|---|---|
-| `chroma-data.zip` | Chroma 벡터 DB (place 819 + psych 709) | 클론한 `emoti-place/` **옆에** 풀어 `../chroma-data/`가 되도록 |
-| `backend-raw.zip` | TourAPI 원본 JSONL 28개 | `emoti-place/backend/data/raw/` 안에 풀기 |
-
-### 0.2 직접 발급 (또는 팀장에게 받기)
+### 0.1 직접 발급 (또는 팀장에게 받기)
 - `OPENAI_API_KEY` — **자기 거 발급 권장 (비용 발생)**. https://platform.openai.com/api-keys
-- `TOUR_API_SERVICE_KEY` — 팀장 거 받아도 무방 (raw zip 받으면 거의 쓸 일 없음)
+- `TOUR_API_SERVICE_KEY` — TourAPI 재수집 안 할 거면 비워둬도 OK
 
-### 0.3 시스템 요구사항
+### 0.2 시스템 요구사항
 - **Node.js 18+** (https://nodejs.org)
 - **Python 3.10+** + `pip install chromadb` (Chroma 서버용)
 - (옵션) PostgreSQL 16 — 없으면 PGlite 자동 사용 (별도 설치 불필요)
@@ -35,23 +29,22 @@ git checkout front
 
 ---
 
-## 2. 데이터 풀기
+## 2. 데이터 위치 확인
 
-받은 zip 2개를 다음 위치에 풀어주세요.
+Chroma 벡터 DB와 TourAPI 원본은 repo 안에 같이 포함되어 있어서 별도 풀기 작업이 필요 없습니다.
 
-```
-어딘가/
-├─ chroma-data/         ← chroma-data.zip 풀기 (emoti-place 옆에)
-└─ emoti-place/
-   └─ backend/
-      └─ data/
-         └─ raw/        ← backend-raw.zip 풀기 (28개 .jsonl 파일)
+```text
+emoti-place/
+├─ chroma-data/                 ← Chroma DB (place 1781 + psych 709)
+└─ backend/
+   └─ data/
+      └─ raw/                   ← TourAPI 원본 jsonl 84개 (서울 24구)
 ```
 
 확인:
 ```powershell
-ls ../chroma-data        # chroma.sqlite3 + 컬렉션 폴더들 보여야 함
-ls backend/data/raw      # tour-*.jsonl 28개 보여야 함
+ls chroma-data           # chroma.sqlite3 + 컬렉션 폴더들
+ls backend/data/raw      # tour-*.jsonl 84개
 ```
 
 ---
@@ -76,13 +69,14 @@ notepad .env
 
 최소한 채울 것:
 ```ini
-OPENAI_API_KEY=sk-...           # ← 본인 키
+OPENAI_API_KEY=sk-...                # ← 본인 키
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/postgres
 CHROMA_HOST=localhost
 CHROMA_PORT=8000
 JWT_SECRET=아무거나-긴-문자열
-LLM_MODEL=gpt-4o-mini
-TOUR_API_SERVICE_KEY=             # 비워둬도 OK (raw 재수집할 일 없으면)
+LLM_MODEL=gpt-4o-mini                # 감정/처방/추천사유 등 schema-bound JSON 단계
+CHAT_MODEL=gpt-5                     # 페르소나 채팅 (instruction-following 중요해서 분리)
+TOUR_API_SERVICE_KEY=                # 비워둬도 OK (raw 재수집할 일 없으면)
 ```
 
 ---
@@ -97,12 +91,14 @@ npm run pglite
 → `[pglite] 소켓 서버 가동: postgresql://...:5433/postgres` 뜨면 OK
 
 ### 터미널 B — Chroma 벡터 DB
+
+repo 안의 `chroma-data/` 를 가리키도록 띄웁니다. emoti-place 디렉토리에서:
 ```powershell
-chroma run --path "C:\...\chroma-data" --host localhost --port 8000
+chroma run --path .\chroma-data --host localhost --port 8000
 ```
 → `Connect to Chroma at: http://localhost:8000` 뜨면 OK
 
-> ⚠️ `--path` 절대경로 정확히. 0.2의 위치(`emoti-place` 옆에 푼 chroma-data) 가리키도록.
+> ⚠️ **path 가 repo 내부 `./chroma-data` 인지 꼭 확인.** 외부 위치를 가리키면 옛 데이터(819건)만 보이거나 빈 컬렉션이 떠서, 추천 카드 일부가 정보 없이 뜨거나 후보 풀이 좁아집니다.
 
 ---
 
@@ -111,12 +107,14 @@ chroma run --path "C:\...\chroma-data" --host localhost --port 8000
 새 PowerShell 창에서:
 ```powershell
 cd C:\...\emoti-place\backend
-npm run init-db          # 테이블 생성 (mbti CHAR(4) 등)
+npm run init-db          # 테이블 생성 (user/session/place/recommendation + feedback/saved 등)
 npm run seed-personas    # 페르소나 3종 시드
-npm run etl:load-places  # raw → PG place 819건 UPSERT
+npm run etl:load-places  # raw → PG place 1781건 UPSERT
 ```
 
-마지막 명령 끝에 `PostgreSQL UPSERT: 819건` 뜨면 정상.
+마지막 명령 끝에 `PostgreSQL UPSERT: 1781건` 뜨면 정상.
+
+> Chroma 도 같은 1781건 (`b29baa3` 커밋에 포함되어 있음). PG/Chroma 카운트가 비슷해야 추천 카드 정보가 정상으로 채워집니다.
 
 ---
 
@@ -149,9 +147,10 @@ npm start
 |---|---|
 | `ECONNREFUSED ::1:5432` 또는 `127.0.0.1:5433` | PGlite/PostgreSQL 안 떠있음 → 5단계 터미널 A |
 | `ECONNREFUSED 127.0.0.1:8000` | Chroma 안 떠있음 → 5단계 터미널 B |
-| `Collection not found: place_embeddings` | Chroma `--path` 경로 잘못. chroma-data 풀어둔 절대경로 다시 확인 |
+| `Collection not found: place_embeddings` | Chroma `--path` 경로 잘못. repo 안 `./chroma-data` 가리키는지 확인 |
+| Chroma 카운트가 819 (1781이어야 함) | `--path` 가 repo 밖 옛 chroma-data 가리키는 중. `./chroma-data` 로 재기동 |
 | `OPENAI_API_KEY 미설정` | `.env`에 키 안 채움 |
-| 추천 카드에 사진/거리 없음 | `etl:load-places` 안 돌렸거나 PG가 비어있음. `psql`로 `SELECT COUNT(*) FROM place;` 확인 (819) |
+| 추천 카드에 사진/거리 없음 | `etl:load-places` 안 돌렸거나 PG가 비어있음. `psql`로 `SELECT COUNT(*) FROM place;` 확인 (1781) |
 | `pgdata` 락 걸림 (PGlite 재시작 안 됨) | `backend/pgdata/` 폴더 통째로 삭제 후 `init-db`부터 다시 |
 | MBTI가 추천에 안 반영 | 회원가입/PATCH로 MBTI 등록했는지 확인. 응답 `prescription.mbti_signals_applied` 비어있으면 user 테이블에 mbti NULL |
 
@@ -159,24 +158,23 @@ npm start
 
 ## 폴더 구조 (받은 후)
 
-```
+```text
 emoti-place/                       ← git repo
 ├─ backend/                        ← 메인 작업 영역
 │  ├─ src/
 │  │  ├─ llm/                      # Stage 1/2/3 LLM 모듈
-│  │  ├─ services/                 # auth, chat, emotion, prescription, recommend
+│  │  ├─ services/                 # auth, chat, emotion, prescription, recommend, feedback, saved
 │  │  ├─ routes/                   # /api/* 엔드포인트
 │  │  └─ etl/                      # raw → PG/Chroma 적재 파이프라인
 │  ├─ scripts/                     # init-db, seedPersonas, etl/* 등
 │  ├─ data/
-│  │  ├─ raw/                      ← zip에서 풀린 28개 jsonl
+│  │  ├─ raw/                      # TourAPI 원본 84개 jsonl (서울 24구, repo 포함)
 │  │  └─ psych/processed/          # chunks.jsonl (Stage 1 RAG, repo 포함)
-│  ├─ public/index.html            # 테스트 콘솔 (당신이 보는 그 화면)
+│  ├─ public/                      # 테스트 콘솔
 │  ├─ pgdata/                      # PGlite Postgres 데이터 (자동 생성)
 │  └─ .env                         # 본인 API 키
+├─ chroma-data/                    # Chroma 벡터 DB (1781 places + 709 psych, repo 포함)
 └─ frontend/                       # Flutter (별도 작업 영역)
-
-../chroma-data/                    ← zip에서 풀린 Chroma DB
 ```
 
 ---
