@@ -1,8 +1,8 @@
 # Emoti-Place 장소 데이터 번들
 
 ## 무엇이 들어있나
-- `places.jsonl` — PostgreSQL `place` 테이블 행 (819건)
-- `embeddings.jsonl` — Chroma `place_embeddings` 컬렉션 벡터 (819건, 768차원, text-embedding-3-small)
+- `places.jsonl` — PostgreSQL `place` 테이블 행 (2051건)
+- `embeddings.jsonl` — Chroma `place_embeddings` 컬렉션 벡터 (2051건, 768차원, text-embedding-3-small)
 - `MANIFEST.json` — 메타데이터 (수집 범위, 모델, 생성 시각)
 
 ## 어떻게 복원하나
@@ -36,4 +36,4 @@ npm run etl:run -- --sigungu=마포  # 마포구 추가 수집·적재·임베�
 npm run etl:export                 # 번들 재생성
 ```
 
-생성 시각: 2026-04-27T08:06:40.137Z
+생성 시각: 2026-05-25T15:02:20.396Z
