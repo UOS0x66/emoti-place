@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../data/personas.dart';
 import '../services/session_service.dart';
 
@@ -47,13 +46,16 @@ class _SessionSidebarState extends State<SessionSidebar> {
     final dateOnly = DateTime(date.year, date.month, date.day);
 
     if (dateOnly == today) {
-      return DateFormat('HH:mm').format(date);
+      final hh = date.hour.toString().padLeft(2, '0');
+      final mm = date.minute.toString().padLeft(2, '0');
+      return '$hh:$mm';
     } else if (dateOnly == yesterday) {
       return '어제';
     } else if (now.difference(dateOnly).inDays < 7) {
-      return DateFormat('E', 'ko_KR').format(date);
+      const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+      return weekdays[date.weekday - 1];
     } else {
-      return DateFormat('MMM d', 'ko_KR').format(date);
+      return '${date.month}월 ${date.day}일';
     }
   }
 

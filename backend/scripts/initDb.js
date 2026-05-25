@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS "user" (
 
 -- 기존 user 테이블이 이미 있을 경우 mbti 컬럼만 추가
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS mbti CHAR(4);
+
+-- 기존 session 테이블에 SessionSave 기능에서 추가된 컬럼들 보강
+ALTER TABLE session ADD COLUMN IF NOT EXISTS title VARCHAR(100);
+ALTER TABLE session ADD COLUMN IF NOT EXISTS message_count INTEGER DEFAULT 0;
 DO $$
 BEGIN
   IF NOT EXISTS (

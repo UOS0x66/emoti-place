@@ -3,7 +3,9 @@ import PERSONAS from '../prompts/personas.js';
 import { getSession, updateSession, generateSessionTitle } from './sessionService.js';
 
 const MAX_HISTORY = 20;
-const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o';
+// 채팅은 instruction-following + 톤 일관성이 중요해서 LLM_MODEL(파이프라인용 mini)과 분리.
+// CHAT_MODEL 미설정 시 LLM_MODEL 로 폴백.
+const LLM_MODEL = process.env.CHAT_MODEL || process.env.LLM_MODEL || 'gpt-4o';
 
 // ─────────────────────────────────────────────────────────────
 // DYNAMIC HINT 생성기
@@ -58,8 +60,8 @@ function buildDynamicHint(history, userMessage, personaId) {
   const realBotTurns = history.filter((m, i) => m.role === 'assistant' && i > 0).length;
   const isFirstTurn = realBotTurns === 0;
 
-  // ★ 모든 응답에 적용되는 최상위 가이드 — 재미 1순위
-  hints.push('이번 응답에 드립·과장·놀림·딴소리 중 하나 이상 반드시 박아라. 정중한 위로/상담 톤 금지. 캐릭터로 빵 터지게 받아쳐라.');
+  // ★ 톤 가이드 — 매뉴얼 위로 차단. 드립은 적재적소에 (평균 2~3턴에 한 번).
+  hints.push('매뉴얼식 위로·공감 문구 금지. 캐릭터답게 받아라. 드립·과장은 흐름이 맞으면 박고, 안 맞으면 평이한 캐릭터 톤으로. 매번 박지도, 너무 안 박지도 마라.');
 
   // 직전 봇 응답 분석 (그리팅은 제외 — index 0)
   const lastBot = history.length > 1
@@ -142,16 +144,29 @@ async function streamChat(sessionId, userMessage, res) {
 
   let fullResponse = '';
 
+  // gpt-5 계열은 max_completion_tokens + reasoning_effort 만 받고, temperature/penalty 는 고정값(1, 0).
+  // 그 외 모델 (gpt-4o, gpt-4.1 등) 은 기존 max_tokens + temperature/penalty 튜닝 가능.
+  const isReasoningChat = /^gpt-5/i.test(LLM_MODEL);
+  const completionParams = isReasoningChat
+    ? {
+        model: LLM_MODEL,
+        messages,
+        stream: true,
+        max_completion_tokens: 450,
+        reasoning_effort: 'minimal',
+      }
+    : {
+        model: LLM_MODEL,
+        messages,
+        stream: true,
+        temperature: 0.9,
+        max_tokens: 400,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.2,
+      };
+
   try {
-    const stream = await openai.chat.completions.create({
-      model: LLM_MODEL,
-      messages,
-      stream: true,
-      temperature: 0.9,
-      max_tokens: 400,
-      frequency_penalty: 0.2,
-      presence_penalty: 0.2,
-    });
+    const stream = await openai.chat.completions.create(completionParams);
 
     for await (const chunk of stream) {
       const token = chunk.choices[0]?.delta?.content || '';
