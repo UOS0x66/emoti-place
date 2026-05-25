@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS session (
   companion VARCHAR(20) DEFAULT 'ALONE',
   activity_preference VARCHAR(20) DEFAULT 'STATIC',
   time_preference VARCHAR(20) DEFAULT 'NONE',
+  title VARCHAR(100),
+  message_count INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '24 hours')
 );
