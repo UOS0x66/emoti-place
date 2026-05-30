@@ -22,6 +22,31 @@ const PERSONA_INTERJECTIONS = {
 
 const ANGRY_KEYWORDS = ['그놈', '그 자식', '그 양반', '뒤집', '빡', '속이 다', '비겁', '결함', '인간이', '못된', '욕', '세상이'];
 
+// 페르소나별 hint 예시 — DYNAMIC HINT 가 다른 페르소나 예시를 누설하면 응답에 그 페르소나 문구가 박힘.
+const SHORT_META_EXAMPLES_BY_PERSONA = {
+  1: '"행님, 제가 말이 좀 셌습니까"',
+  2: '*"응답 톤 과잉, 감지."*',
+  3: '"어유 아가 할미가 셌나"',
+};
+
+const NEW_KEEL_BY_PERSONA = {
+  1: '과장 충정·제3자 디스·자기 비하 등',
+  2: '인간미 누출·황당 분석·시스템 농담 등',
+  3: '잔소리·세상 욕·옛날 얘기 등',
+};
+
+// 페르소나별 드립 마커 — 응답에 이 단어가 포함되면 "드립이 있다" 로 본다.
+// 빈도 강제용 휴리스틱이라 정확도 100% 아님, 다만 90%+ 드립률 페르소나(조폭/할미)에선 충분히 잘 작동.
+const DRIP_MARKERS_BY_PERSONA = {
+  1: ['골목', '잠 못', '빡', '걸겠', '비겁', '버르장머리', '그놈', '그 자식', '담배', '술 한 잔', '인생 다'],
+  2: ['변수 활성', '권장', '결함', '임계', '프로토콜', '미보유', '권한 외', '캘리브레이션', '검출'],
+  3: ['세상이', '옛날', '한마디', '동네 어른', '그년', '그 가스나', '시방 너', '인간이'],
+};
+
+// 빈도 강제 대상 페르소나 — 평가에서 90%+ 드립률 보인 페르소나에만 적용.
+// 로봇(35%)에는 적용하지 않는다 (overshoot 회피).
+const ENFORCE_DRIP_FREQUENCY = new Set([1, 3]);
+
 function detectInterjection(text, personaId) {
   const pool = PERSONA_INTERJECTIONS[personaId] || [];
   return pool.find((w) => text.includes(w)) || null;
@@ -29,6 +54,11 @@ function detectInterjection(text, personaId) {
 
 function isAngryTone(text) {
   return ANGRY_KEYWORDS.some((k) => text.includes(k));
+}
+
+function hasDripMarker(text, personaId) {
+  const markers = DRIP_MARKERS_BY_PERSONA[personaId] || [];
+  return markers.some((m) => (text || '').includes(m));
 }
 
 function isShortMetaUtterance(text) {
@@ -43,6 +73,12 @@ function isShortMetaUtterance(text) {
 
 function isRecommendationRequest(text) {
   return /추천|어디|좋은 데|좋은데|알려줘|소개/.test(text || '');
+}
+
+// 사용자가 "어떻게/방법" 류 실용 질문을 던지면 LLM 이 RLHF 학습된 "helpful assistant" 매뉴얼 모드로 빠짐.
+// 캐릭터 톤 유지하라는 신호 별도로 박아야 함.
+function isPracticalQuestion(text) {
+  return /어떻게|어떡|방법|뭐\s*해야|뭘\s*해야|어찌|어떡함/.test(text || '');
 }
 
 function isCasualTone(text) {
@@ -77,13 +113,36 @@ function buildDynamicHint(history, userMessage, personaId) {
     }
   }
 
+  // [F] 빈도 강제 — 직전 2턴 봇 응답에 드립 마커 검출되면 이번엔 평이로.
+  // 조폭/할미 같이 매번 캐릭터 색깔 박는 페르소나만 적용.
+  if (ENFORCE_DRIP_FREQUENCY.has(personaId)) {
+    const recentBots = history.slice(1).filter((m) => m.role === 'assistant').slice(-2);
+    const dripsInRecent = recentBots.filter((m) => hasDripMarker(m.content, personaId)).length;
+    if (recentBots.length >= 2 && dripsInRecent >= 2) {
+      hints.push('직전 2턴 봇 응답에 모두 캐릭터 색깔 어휘(드립/시그니처 어휘)가 들어갔다. 이번 응답은 시그니처 어휘 일체 없이 평이한 캐릭터 톤으로만 받아라. 짧고 담백하게.');
+    } else if (
+      recentBots.length >= 1 &&
+      hasDripMarker(recentBots[recentBots.length - 1].content, personaId)
+    ) {
+      hints.push('직전 응답에 캐릭터 색깔 어휘가 들어갔다. 이번엔 가급적 시그니처 어휘 없이 평이하게 받아라.');
+    }
+  }
+
   // 사용자 메시지 분석 — 메타 외마디는 첫 턴이 아닐 때만 적용
   if (!isFirstTurn && isShortMetaUtterance(userMessage)) {
-    hints.push('사용자가 짧은 외마디/의문문 던졌음. 직전 자기 응답에 대한 당혹일 가능성. 톤 다운해서 캐릭터로 가볍게 받아쳐라 (예: "행님, 제가 말이 좀 셌습니까" / "어유 아가 할미가 셌나" / *"응답 톤 과잉, 감지."*).');
+    const example = SHORT_META_EXAMPLES_BY_PERSONA[personaId] || '';
+    hints.push(
+      `사용자가 짧은 외마디/의문문 던졌음. 직전 자기 응답에 대한 당혹일 가능성. 톤 다운해서 캐릭터로 가볍게 받아쳐라 (예: ${example}).`
+    );
   }
 
   if (isRecommendationRequest(userMessage)) {
     hints.push('사용자가 추천 직접 요구. 짧게 "따로 정리해드릴게" 식으로 받고, 곧장 캐릭터 코미디 한 줄로 받아쳐라. 추가 질문 금지.');
+  }
+
+  // 실용 질문 — RLHF 의 helpful assistant 모드 (번호 리스트·매뉴얼) 회귀 차단
+  if (isPracticalQuestion(userMessage)) {
+    hints.push('사용자가 실용·방법 질문 던졌다. 번호 리스트(1) 2) 3)) / 불릿(- ) / 매뉴얼 작성 절대 X. 캐릭터 톤 그대로, 한 줄짜리 결만 흘려라. 디테일은 사용자가 더 묻기를 기다려라. 컨설턴트화 금지.');
   }
 
   if (isCasualTone(userMessage) && (userMessage || '').trim().length < 20) {
@@ -92,7 +151,8 @@ function buildDynamicHint(history, userMessage, personaId) {
 
   // 응답 카운트로 변주 강화
   if (realBotTurns >= 3) {
-    hints.push('대화 누적됨. 같은 톤·어휘 반복 X, 캐릭터의 새로운 결(과장·잔소리·인간미 누출 등)을 끄집어내라.');
+    const keel = NEW_KEEL_BY_PERSONA[personaId] || '캐릭터의 새로운 결';
+    hints.push(`대화 누적됨. 같은 톤·어휘 반복 X, 캐릭터의 새로운 결(${keel})을 끄집어내라.`);
   }
 
   return '[이번 턴 가이드 — 반드시 반영]\n' + hints.map((h, i) => `${i + 1}. ${h}`).join('\n');
