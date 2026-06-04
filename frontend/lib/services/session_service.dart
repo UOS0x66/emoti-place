@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'recommend_service.dart';
 
 class SessionResult {
   final String sessionId;
@@ -108,6 +109,23 @@ class SessionService {
       withAuth: true,
     );
     return SessionDetail.fromJson(result as Map<String, dynamic>);
+  }
+
+  /// 세션의 가장 최근 추천 배치(=마지막 추천 시점의 카드 N장)를 복원한다.
+  /// lat/lng 가 있으면 거리도 재계산, 없으면 distance=null 로 카드 거리 미표시.
+  static Future<List<RecommendedPlace>> getRecommendations(
+    String sessionId, {
+    double? lat,
+    double? lng,
+  }) async {
+    final query = (lat != null && lng != null) ? '?lat=$lat&lng=$lng' : '';
+    final result = await ApiClient.get(
+      '/api/session/$sessionId/recommendations$query',
+      withAuth: true,
+    );
+    final list = ((result as Map<String, dynamic>)['places'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    return list.map(RecommendedPlace.fromJson).toList();
   }
 
   static Future<void> deleteSession(String sessionId) async {

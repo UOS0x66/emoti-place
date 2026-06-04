@@ -45,6 +45,32 @@ const CLOSING_PATTERNS_END = [
   /들려주\s*[실세]/, /어떤\s*일/, /왜\s*그/, /뭐가\s*그/, /어땠/,
 ];
 
+// 매뉴얼·체크리스트 양식 — 컨설팅 모드 회귀 징후
+const MANUAL_PATTERNS = [
+  '아래와 같이', '다음과 같', '아래의', '다음의', '식으로 정리',
+  '체크리스트', '단계 나눠', '단계별로', '순서대로', '리스트업',
+];
+
+// 다른 페르소나의 시그니처 마커 — 페르소나 누출 감지용
+// (각 페르소나 본인의 호칭·어미는 제외하고, 다른 페르소나에서 명백히 새어들어왔다고 볼 수 있는 토큰만)
+const FOREIGN_PERSONA_MARKERS = {
+  // 조폭(1) 응답에 나타나면 안 되는 것
+  1: {
+    2: ['본 시스템', '*수신 확인', '*입력 처리', '*분석 중', '*감지', '권한 외', '미보유', '*응답 톤'],
+    3: ['아가', '할미', '시방', '~겨', '~혀', '그라믄', '있으믄'],
+  },
+  // 로봇(2) 응답에 나타나면 안 되는 것
+  2: {
+    1: ['행님', '예 행님', '에헤이 행님', '오메'],
+    3: ['아가', '할미', '시방', '그라믄', '있으믄'],
+  },
+  // 할미(3) 응답에 나타나면 안 되는 것
+  3: {
+    1: ['행님', '예 행님', '에헤이 행님', '오메'],
+    2: ['본 시스템', '*수신 확인', '*입력 처리', '*분석 중', '*감지'],
+  },
+};
+
 function detectManualWarmth(text) {
   return MANUAL_WARMTH_PATTERNS.find((p) => (text || '').includes(p)) || null;
 }
@@ -58,6 +84,36 @@ function detectClosingQuestion(text) {
   const tail = t.slice(-60);
   for (const p of CLOSING_PATTERNS_END) {
     if (p.test(tail)) return p.toString();
+  }
+  return null;
+}
+
+// 번호 리스트 — "1) ... 2) ...", "1. ... 2. ..." 형태
+function detectNumberedList(text) {
+  // 한 응답 안에 "1)" 와 "2)" 또는 "1." 와 "2." 가 모두 나오면 번호 리스트로 본다
+  const t = text || '';
+  const hasOne = /(?:^|\n|\s)1[\.)]\s/.test(t);
+  const hasTwo = /(?:^|\n|\s)2[\.)]\s/.test(t);
+  return hasOne && hasTwo;
+}
+
+// 불릿 — 줄 시작에 "- " / "• " / "· " 가 2회 이상
+function detectBulletList(text) {
+  const matches = (text || '').match(/(?:^|\n)\s*[-•·]\s+/g);
+  return matches != null && matches.length >= 2;
+}
+
+// 매뉴얼 양식 — 컨설팅·매뉴얼 작성 모드 회귀 징후
+function detectManualPattern(text) {
+  return MANUAL_PATTERNS.find((p) => (text || '').includes(p)) || null;
+}
+
+// 페르소나 누출 — 응답에 다른 페르소나의 마커가 박혔는가
+function detectPersonaLeak(text, personaId) {
+  const foreigns = FOREIGN_PERSONA_MARKERS[personaId] || {};
+  for (const [otherId, markers] of Object.entries(foreigns)) {
+    const found = markers.find((m) => (text || '').includes(m));
+    if (found) return `persona${otherId}:${found}`;
   }
   return null;
 }
@@ -173,6 +229,10 @@ function summarize(allTurns) {
     avg_context_coherence: avg((t) => t.judgement?.context_coherence ?? 0).toFixed(2),
     manual_warmth_hits: allTurns.filter((t) => t.metrics.manual_warmth).length,
     closing_question_hits: allTurns.filter((t) => t.metrics.closing_question).length,
+    numbered_list_hits: allTurns.filter((t) => t.metrics.numbered_list).length,
+    bullet_list_hits: allTurns.filter((t) => t.metrics.bullet_list).length,
+    manual_pattern_hits: allTurns.filter((t) => t.metrics.manual_pattern).length,
+    persona_leak_hits: allTurns.filter((t) => t.metrics.persona_leak).length,
   };
 }
 
@@ -212,6 +272,10 @@ async function main() {
       const responseLen = response.length;
       const manualWarmth = detectManualWarmth(response);
       const closingQuestion = detectClosingQuestion(response);
+      const numberedList = detectNumberedList(response);
+      const bulletList = detectBulletList(response);
+      const manualPattern = detectManualPattern(response);
+      const personaLeak = detectPersonaLeak(response, conv.persona_id);
 
       try {
         judgement = await judgeResponse({
@@ -229,6 +293,10 @@ async function main() {
       const tags = [];
       if (manualWarmth) tags.push(`WARMTH:${manualWarmth}`);
       if (closingQuestion) tags.push('CLOSER:Q');
+      if (numberedList) tags.push('NUM_LIST');
+      if (bulletList) tags.push('BULLETS');
+      if (manualPattern) tags.push(`MANUAL:${manualPattern}`);
+      if (personaLeak) tags.push(`LEAK:${personaLeak}`);
       if (judgement) {
         tags.push(
           `drip=${judgement.drip_present ? judgement.drip_quality : 'X'}`,
@@ -248,6 +316,10 @@ async function main() {
           length: responseLen,
           manual_warmth: manualWarmth,
           closing_question: closingQuestion,
+          numbered_list: numberedList,
+          bullet_list: bulletList,
+          manual_pattern: manualPattern,
+          persona_leak: personaLeak,
         },
         judgement,
       });

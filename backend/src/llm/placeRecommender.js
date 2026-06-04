@@ -120,7 +120,10 @@ export async function recommendPlaces(prescription, options = {}) {
       }
       return {
         id,
-        title: metas[i]?.title || '',
+        // 메타에 tour_content_id 가 있으면 그것이 PG join 키. 없으면 chroma id 자체.
+        // (Chroma 와 PG 가 다른 적재 시점이라 id 자체로는 PG 매칭 불가)
+        tour_content_id: metas[i]?.tour_content_id ?? id,
+        title: metas[i]?.title || metas[i]?.name || '',
         contenttypeid: metas[i]?.contenttypeid,
         sigungucode: metas[i]?.sigungucode,
         cat3: metas[i]?.cat3 || '',

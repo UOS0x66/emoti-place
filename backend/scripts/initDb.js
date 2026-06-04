@@ -24,6 +24,8 @@ ALTER TABLE "user" ADD COLUMN IF NOT EXISTS mbti CHAR(4);
 -- 기존 session 테이블에 SessionSave 기능에서 추가된 컬럼들 보강
 ALTER TABLE session ADD COLUMN IF NOT EXISTS title VARCHAR(100);
 ALTER TABLE session ADD COLUMN IF NOT EXISTS message_count INTEGER DEFAULT 0;
+-- 메모리 추출 완료 플래그 (다음 세션 생성 시 미처리 세션만 추출)
+ALTER TABLE session ADD COLUMN IF NOT EXISTS memories_extracted BOOLEAN DEFAULT FALSE;
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -147,6 +149,40 @@ CREATE TABLE IF NOT EXISTS user_saved_place (
 );
 CREATE INDEX IF NOT EXISTS idx_user_saved_place_user_saved
   ON user_saved_place(user_id, saved_at DESC);
+
+-- 사용자 메모리 (페르소나 callback 용 — 다음 세션 시작 시 그리팅·DYNAMIC HINT 에 주입)
+-- 세션 삭제 시 같이 사라지도록 source_session_id 는 CASCADE.
+CREATE TABLE IF NOT EXISTS user_memory (
+  memory_id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
+  memory_type VARCHAR(20) NOT NULL CHECK (memory_type IN ('fact', 'topic', 'event', 'preference')),
+  content TEXT NOT NULL,
+  importance INTEGER NOT NULL DEFAULT 3 CHECK (importance BETWEEN 1 AND 5),
+  source_session_id UUID REFERENCES session(session_id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_memory_user_priority
+  ON user_memory(user_id, importance DESC, last_used_at DESC);
+
+-- 마이그레이션: 기존 user_memory.source_session_id FK 가 SET NULL 이었으면 CASCADE 로 교체.
+-- 그래야 세션 삭제 시 거기서 추출한 메모리도 같이 사라진다.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.referential_constraints
+     WHERE constraint_name = 'user_memory_source_session_id_fkey'
+       AND delete_rule = 'SET NULL'
+  ) THEN
+    ALTER TABLE user_memory DROP CONSTRAINT user_memory_source_session_id_fkey;
+    ALTER TABLE user_memory ADD CONSTRAINT user_memory_source_session_id_fkey
+      FOREIGN KEY (source_session_id) REFERENCES session(session_id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- 이미 발생한 고아 memory 정리 — source_session_id IS NULL 은 옛 SET NULL 동작 잔재
+-- (사용자가 의도적으로 지운 세션의 흔적). 모두 제거.
+DELETE FROM user_memory WHERE source_session_id IS NULL;
 `;
 
 async function main() {

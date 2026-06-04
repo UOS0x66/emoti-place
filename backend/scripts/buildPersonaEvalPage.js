@@ -130,6 +130,10 @@ function renderSummary() {
       \${metricRow('문맥 정합성', s.avg_context_coherence + '/5')}
       \${metricRow('매뉴얼 위로', s.manual_warmth_hits + '건')}
       \${metricRow('클로저 질문', s.closing_question_hits + '건')}
+      \${metricRow('번호 리스트', (s.numbered_list_hits ?? 0) + '건')}
+      \${metricRow('불릿 리스트', (s.bullet_list_hits ?? 0) + '건')}
+      \${metricRow('매뉴얼 양식', (s.manual_pattern_hits ?? 0) + '건')}
+      \${metricRow('페르소나 누출', (s.persona_leak_hits ?? 0) + '건')}
     </div>
   \`];
 
@@ -147,6 +151,10 @@ function renderSummary() {
         \${metricRow('문맥 정합성', ps.avg_context_coherence + '/5')}
         \${metricRow('매뉴얼 위로', ps.manual_warmth_hits + '건')}
         \${metricRow('클로저 질문', ps.closing_question_hits + '건')}
+        \${metricRow('번호 리스트', (ps.numbered_list_hits ?? 0) + '건')}
+        \${metricRow('불릿 리스트', (ps.bullet_list_hits ?? 0) + '건')}
+        \${metricRow('매뉴얼 양식', (ps.manual_pattern_hits ?? 0) + '건')}
+        \${metricRow('페르소나 누출', (ps.persona_leak_hits ?? 0) + '건')}
       </div>
     \`);
   }
@@ -165,6 +173,10 @@ function summarize(turns) {
     avg_context_coherence: avg(t => t.judgement && t.judgement.context_coherence).toFixed(2),
     manual_warmth_hits: turns.filter(t => t.metrics.manual_warmth).length,
     closing_question_hits: turns.filter(t => t.metrics.closing_question).length,
+    numbered_list_hits: turns.filter(t => t.metrics.numbered_list).length,
+    bullet_list_hits: turns.filter(t => t.metrics.bullet_list).length,
+    manual_pattern_hits: turns.filter(t => t.metrics.manual_pattern).length,
+    persona_leak_hits: turns.filter(t => t.metrics.persona_leak).length,
   };
 }
 

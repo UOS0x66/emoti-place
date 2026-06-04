@@ -50,8 +50,11 @@ export async function recommend(sessionId, lat, lng) {
   });
   if (candidates.length === 0) return emptyResult(emotionScores, prescription, personalization);
 
-  // Chroma의 contentid → PG의 tour_content_id 매핑
-  const tourIds = candidates.map((c) => String(c.id));
+  // Chroma 메타의 tour_content_id → PG의 tour_content_id 매핑
+  // (Chroma 결과의 c.id 는 Chroma 내부 ID 라 PG 와 직접 매칭 안 됨)
+  const tourIds = candidates
+    .map((c) => (c.tour_content_id != null ? String(c.tour_content_id) : null))
+    .filter(Boolean);
   const dbResult = await pool.query(
     `SELECT * FROM place WHERE tour_content_id = ANY($1::varchar[])`,
     [tourIds]
@@ -63,7 +66,8 @@ export async function recommend(sessionId, lat, lng) {
   // (b) 카드 정보(주소·좌표·사진)가 빈 채로 노출돼 추천 가치도 없다.
   const enriched = candidates
     .map((c) => {
-      const pg = byTourId.get(String(c.id));
+      const pg =
+        c.tour_content_id != null ? byTourId.get(String(c.tour_content_id)) : null;
       if (!pg || pg.lat == null || pg.lng == null) return null;
       return {
         ...pg,

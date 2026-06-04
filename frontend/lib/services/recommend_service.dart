@@ -8,7 +8,8 @@ class RecommendedPlace {
   final double lat;
   final double lng;
   final String? photo;
-  final double distance;
+  // 사용자 위치 기준 거리(km). 세션 resume 으로 복원된 카드의 경우 lat/lng 미제공이면 null.
+  final double? distance;
   final String? atmosphereText;
   final String? summaryText;
   final dynamic operatingHours;
@@ -26,7 +27,7 @@ class RecommendedPlace {
     required this.lat,
     required this.lng,
     this.photo,
-    required this.distance,
+    this.distance,
     this.atmosphereText,
     this.summaryText,
     this.operatingHours,
@@ -62,8 +63,7 @@ class RecommendedPlace {
       lng: (json['lng'] as num).toDouble(),
       photo: json['photo'] as String?,
       distance: (json['distance'] as num?)?.toDouble()
-          ?? (json['distance_km'] as num?)?.toDouble()
-          ?? 0,
+          ?? (json['distance_km'] as num?)?.toDouble(),
       atmosphereText: json['atmosphere_text'] as String?,
       summaryText: json['summary_text'] as String?,
       operatingHours: json['operating_hours'],

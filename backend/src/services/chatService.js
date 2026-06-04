@@ -1,6 +1,8 @@
 import openai from '../config/openai.js';
 import PERSONAS from '../prompts/personas.js';
 import { getSession, updateSession, generateSessionTitle } from './sessionService.js';
+import { listMemoriesForUser } from './memoryService.js';
+import { detectEdgeCase, getEdgeCaseHint } from '../prompts/edgeCases.js';
 
 const MAX_HISTORY = 20;
 // 채팅은 instruction-following + 톤 일관성이 중요해서 LLM_MODEL(파이프라인용 mini)과 분리.
@@ -89,8 +91,26 @@ function isCasualTone(text) {
   return !negatives.test(t);
 }
 
-function buildDynamicHint(history, userMessage, personaId) {
+function buildDynamicHint(history, userMessage, personaId, memories = []) {
   const hints = [];
+
+  // 엣지 케이스 — 패턴 매치 시 강한 우선 hint (다른 가이드보다 위에 박는다)
+  const edgeCase = detectEdgeCase(userMessage, history);
+  if (edgeCase) {
+    const edgeHint = getEdgeCaseHint(edgeCase, personaId);
+    if (edgeHint) hints.push(edgeHint);
+  }
+
+  // 메모리 callback — 이전 만남에서 알게 된 사용자 컨텍스트
+  if (Array.isArray(memories) && memories.length > 0) {
+    const memSection = memories
+      .slice(0, 3)
+      .map((m) => `- ${m.content}`)
+      .join('\n');
+    hints.push(
+      `[사용자 컨텍스트 — 이전 만남에서 알게 된 것]\n${memSection}\n흐름이 자연스럽게 맞을 때만 캐릭터 톤으로 한 마디 callback (예: "아까 그놈 또 그러던가요?"). 매 응답마다 박지 마라. 어색하면 그냥 무시.`
+    );
+  }
 
   // 실제 대화 턴 수 (그리팅만 있는 첫 메시지면 0턴)
   const realBotTurns = history.filter((m, i) => m.role === 'assistant' && i > 0).length;
@@ -162,8 +182,8 @@ function buildDynamicHint(history, userMessage, personaId) {
 // 메시지 구성: system + few-shot + history + (hint) + user
 // ─────────────────────────────────────────────────────────────
 
-function composeMessages(persona, personaId, history, userMessage) {
-  const hint = buildDynamicHint(history, userMessage, personaId);
+function composeMessages(persona, personaId, history, userMessage, memories = []) {
+  const hint = buildDynamicHint(history, userMessage, personaId, memories);
 
   const messages = [
     { role: 'system', content: persona.system_prompt },
@@ -190,7 +210,17 @@ async function streamChat(sessionId, userMessage, res) {
   // 대화 히스토리 로드 (사용자 메시지 추가 전 상태가 hint 분석 기준)
   let history = session.conversation_history || [];
 
-  const messages = composeMessages(persona, session.persona_id, history, userMessage);
+  // 메모리 callback — 채팅 응답 latency 에 영향 작도록 짧게 (top 2~3)
+  let memories = [];
+  if (session.user_id) {
+    try {
+      memories = await listMemoriesForUser(session.user_id, 3);
+    } catch (err) {
+      console.error('[chat] 메모리 조회 실패 (무시):', err.message);
+    }
+  }
+
+  const messages = composeMessages(persona, session.persona_id, history, userMessage, memories);
 
   // history는 저장용으로 사용자 메시지 추가
   history.push({ role: 'user', content: userMessage });

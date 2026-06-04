@@ -6,6 +6,7 @@ import {
   getSessionForUser,
   deleteSessionForUser,
   updateSessionTitleForUser,
+  listLatestRecommendationsForSession,
 } from '../services/sessionService.js';
 import PERSONAS from '../prompts/personas.js';
 
@@ -59,6 +60,24 @@ router.get('/:sessionId', authMiddleware, async (req, res, next) => {
       created_at: session.created_at,
       expires_at: session.expires_at,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/session/:sessionId/recommendations - 세션의 가장 최근 추천 배치 복원
+// lat/lng 쿼리 있으면 거리 재계산, 없으면 distance_km = null.
+router.get('/:sessionId/recommendations', authMiddleware, async (req, res, next) => {
+  try {
+    const lat = req.query.lat != null ? Number(req.query.lat) : null;
+    const lng = req.query.lng != null ? Number(req.query.lng) : null;
+    const places = await listLatestRecommendationsForSession(
+      req.userId,
+      req.params.sessionId,
+      lat,
+      lng,
+    );
+    res.json({ places });
   } catch (err) {
     next(err);
   }

@@ -129,6 +129,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// 사이드바에서 선택한 세션의 히스토리를 백엔드에서 받아와 화면을 재구성한다.
+  /// 이전에 받았던 추천 카드도 같이 복원한다 (recommendation 테이블 기반).
   Future<void> _resumeSession(String sessionId) async {
     if (sessionId == _sessionId) return;
     if (_loadingSession) return;
@@ -138,6 +139,33 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       // 페르소나가 다른 세션일 수도 있으니 함께 교체.
       final nextPersona = personaById(detail.personaId);
+
+      // 추천 카드 복원 — 거리 재계산을 위해 GPS 시도하되, 실패해도 카드는 보여준다.
+      List<RecommendedPlace> resumedPlaces = const [];
+      try {
+        double? lat;
+        double? lng;
+        try {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+            ),
+          );
+          lat = pos.latitude;
+          lng = pos.longitude;
+        } catch (_) {
+          // GPS 실패는 무시 — distance 만 null 로 표시 안 됨, 카드 자체는 OK
+        }
+        resumedPlaces = await SessionService.getRecommendations(
+          sessionId,
+          lat: lat,
+          lng: lng,
+        );
+      } catch (_) {
+        // 추천 복원 실패는 치명적이지 않음 — 히스토리만 복원하고 넘어간다
+      }
+
+      if (!mounted) return;
       setState(() {
         _sessionId = detail.sessionId;
         _persona = nextPersona;
@@ -152,6 +180,20 @@ class _ChatScreenState extends State<ChatScreen> {
         // 이미 어느 정도 대화가 쌓인 세션이면 자동 추천을 다시 띄우지 않는다.
         _autoRecommendTriggered =
             _messages.where((m) => m.isUser).length >= _autoRecommendThreshold;
+
+        // 추천 카드 복원: 인트로 → 카드들 → refresh 트리거 순으로 끝에 붙임.
+        // 원본 인트로는 DB 에 안 남으므로 페르소나 멘트로 재구성.
+        if (resumedPlaces.isNotEmpty) {
+          _messages.add(_ChatMessage(text: _autoRecommendIntro(), isUser: false));
+          for (final place in resumedPlaces) {
+            _messages.add(_ChatMessage(text: '', isUser: false, place: place));
+          }
+          _messages.add(const _ChatMessage(
+            text: '',
+            isUser: false,
+            isRefreshTrigger: true,
+          ));
+        }
       });
       _scrollToBottom();
     } catch (e) {
@@ -326,6 +368,24 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
         elevation: 1,
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Builder(
+              builder: (context) => IconButton(
+                tooltip: '세션 목록',
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+            IconButton(
+              tooltip: '뒤로가기',
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
         title: Row(
           children: [
             SizedBox(
@@ -461,7 +521,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           isOutdoor: place.isOutdoor,
                           personaReason: place.reason,
                           accentColor: accentColor,
-                          distanceKm: place.distance > 0 ? place.distance : null,
+                          distanceKm: (place.distance != null && place.distance! > 0)
+                              ? place.distance
+                              : null,
                           rating: _placeRatings[place.placeId],
                           saved: _savedPlaceIds.contains(place.placeId),
                           onSavedChanged: (nextSaved) async {
