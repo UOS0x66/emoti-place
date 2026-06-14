@@ -8,9 +8,11 @@ class ChatService {
   static String get _baseUrl => dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000';
 
   /// SSE 스트림으로 응답 토큰을 하나씩 yield한다.
+  /// [autoRecommend] true 면 백엔드가 응답에 추천 안내 한 줄을 자연스럽게 박는다.
   static Stream<String> streamMessage({
     required String sessionId,
     required String message,
+    bool autoRecommend = false,
   }) async* {
     final token = await AuthStorage.getToken();
     final uri = Uri.parse('$_baseUrl/api/chat/message');
@@ -18,7 +20,11 @@ class ChatService {
     final request = http.Request('POST', uri);
     request.headers['Content-Type'] = 'application/json';
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
-    request.body = jsonEncode({'session_id': sessionId, 'message': message});
+    request.body = jsonEncode({
+      'session_id': sessionId,
+      'message': message,
+      'auto_recommend': autoRecommend,
+    });
 
     final client = http.Client();
     try {

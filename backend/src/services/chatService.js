@@ -3,6 +3,7 @@ import PERSONAS from '../prompts/personas.js';
 import { getSession, updateSession, generateSessionTitle } from './sessionService.js';
 import { listMemoriesForUser } from './memoryService.js';
 import { detectEdgeCase, getEdgeCaseHint } from '../prompts/edgeCases.js';
+import { validateResponse } from './responseValidator.js';
 
 const MAX_HISTORY = 20;
 // 채팅은 instruction-following + 톤 일관성이 중요해서 LLM_MODEL(파이프라인용 mini)과 분리.
@@ -91,8 +92,87 @@ function isCasualTone(text) {
   return !negatives.test(t);
 }
 
-function buildDynamicHint(history, userMessage, personaId, memories = []) {
+// ─────────────────────────────────────────────────────────────
+// 현재 상태 추론 — examples 의 [감정/관계/최근사건] schema 와 일치
+//
+// 휴리스틱 기반 (인라인 LLM 호출 X, latency 0).
+// 향후 emotion extractor 가 도입되면 emotion 만 교체하면 됨.
+// ─────────────────────────────────────────────────────────────
+
+function inferEmotion(userMessage) {
+  const t = (userMessage || '').trim();
+  if (!t) return null;
+  if (/우울|힘들|죽고|울|외로|쓸쓸|허무|공허/.test(t)) return '슬픔/위로 필요';
+  if (/짜증|빡|화|뒤집|미치|진절머리|열받|성질/.test(t)) return '분노/불만';
+  if (/와|대박|신난|짱|럭|성공|기쁘|행복|좋다|좋아/.test(t)) return '기쁨/환희';
+  if (/피곤|지쳤|녹초|뻗|졸려|기진|탈진/.test(t)) return '피곤/무기력';
+  if (/막막|모르겠|어찌|한숨|답답|어떡|망함/.test(t)) return '막막함/혼란';
+  if (/긴장|떨려|불안|걱정|초조/.test(t)) return '불안/초조';
+  if (/그립|보고싶|아쉽|허전/.test(t)) return '그리움/씁쓸함';
+  return '평이/일상';
+}
+
+function inferRelation(history, hasMemories) {
+  const realBotTurns = history.filter((m, i) => m.role === 'assistant' && i > 0).length;
+  if (realBotTurns === 0) return hasMemories ? '오랜만에 다시 보는 사이' : '첫 만남';
+  if (realBotTurns < 5) return hasMemories ? '구면 — 익숙해지는 중' : '인사 트는 중';
+  if (realBotTurns < 15) return '친밀해진 사이';
+  return '오랜 시간 함께한 사이';
+}
+
+/**
+ * memory 가 현재 사용자 메시지와 주제 관련 있는지 휴리스틱 판단.
+ * memory.content 에서 한글 명사 후보를 뽑고 3자 substring (또는 2자 통단어) 단위로
+ * userMessage 에 매치되면 true. 조사 ("~과/~이야/~을") 영향 회피용.
+ * 무관 주제로 LLM 이 옛 memory 를 드립 fodder 로 끌어오는 회귀 차단.
+ */
+function isMemoryRelevant(memory, userMessage) {
+  if (!memory || !userMessage) return false;
+  const content = memory.content || '';
+  const memWords = content.match(/[가-힣]{2,}/g) || [];
+  for (const mw of memWords) {
+    if (mw.length === 2) {
+      if (userMessage.includes(mw)) return true;
+      continue;
+    }
+    // 3자+ → 3자 sliding window substring 매치 (조사 끼어도 핵심 명사 잡음)
+    for (let i = 0; i <= mw.length - 3; i++) {
+      if (userMessage.includes(mw.slice(i, i + 3))) return true;
+    }
+  }
+  return false;
+}
+
+function inferRecentEvent(memories, userMessage) {
+  if (!Array.isArray(memories) || memories.length === 0) return null;
+  // 현재 사용자 메시지와 주제 매치되는 memory 만 박는다 — 무관 주제에 끌려가지 않게.
+  const relevant = memories.find((m) => isMemoryRelevant(m, userMessage));
+  return relevant?.content || null;
+}
+
+function buildStateBlock(history, userMessage, memories) {
+  const emotion = inferEmotion(userMessage);
+  const relation = inferRelation(history, memories.length > 0);
+  const recent = inferRecentEvent(memories, userMessage);
+
+  const lines = ['[현재 상태 — 이번 응답 톤 결정에 반영]'];
+  if (emotion) lines.push(`감정: ${emotion}`);
+  if (relation) lines.push(`관계: ${relation}`);
+  if (recent) lines.push(`최근 사건: ${recent}`);
+  lines.push('→ EXAMPLES 의 같은/비슷한 상태 응답을 참고 (베끼지 말고 변주).');
+  return lines.join('\n');
+}
+
+function buildDynamicHint(history, userMessage, personaId, memories = [], opts = {}) {
   const hints = [];
+
+  // 자동 추천 트리거 턴 — bot 응답에 사용자 메시지 답변 + 추천 안내 한 줄을
+  // 한 호흡으로 자연스럽게 박게 한다. (직후 프론트가 카드 emit)
+  if (opts.autoRecommend) {
+    hints.push(
+      '이번 응답이 자동 장소 추천 트리거 턴이다. 사용자 메시지 답변을 짧게 마무리한 뒤, "~한 데 몇 곳 추려보겠습니다 / 봐둔 데 몇 군데 있습니다" 류 자연스러운 한 줄을 끝에 박아라. 별도 답변 + 별도 안내로 두 문단 나누지 말고 한 호흡으로 묶어 출력. 캐릭터 톤·길이·금지 어미 규칙 그대로.'
+    );
+  }
 
   // 엣지 케이스 — 패턴 매치 시 강한 우선 hint (다른 가이드보다 위에 박는다)
   const edgeCase = detectEdgeCase(userMessage, history);
@@ -102,14 +182,15 @@ function buildDynamicHint(history, userMessage, personaId, memories = []) {
   }
 
   // 메모리 callback — 이전 만남에서 알게 된 사용자 컨텍스트
+  // **주제 관련성 매치된 memory 만** 박는다. 무관 주제 끌어다 드립 fodder 로 쓰는 회귀 방지.
   if (Array.isArray(memories) && memories.length > 0) {
-    const memSection = memories
-      .slice(0, 3)
-      .map((m) => `- ${m.content}`)
-      .join('\n');
-    hints.push(
-      `[사용자 컨텍스트 — 이전 만남에서 알게 된 것]\n${memSection}\n흐름이 자연스럽게 맞을 때만 캐릭터 톤으로 한 마디 callback (예: "아까 그놈 또 그러던가요?"). 매 응답마다 박지 마라. 어색하면 그냥 무시.`
-    );
+    const relevantMems = memories.filter((m) => isMemoryRelevant(m, userMessage)).slice(0, 2);
+    if (relevantMems.length > 0) {
+      const memSection = relevantMems.map((m) => `- ${m.content}`).join('\n');
+      hints.push(
+        `[사용자 컨텍스트 — 현재 주제와 관련된 이전 만남 기억]\n${memSection}\n사용자 메시지 흐름이 자연스러우면 캐릭터 톤으로 한 마디 callback (예: "아까 그놈 또 그러던가요?"). 매 응답마다 박지 마라. 어색하면 그냥 무시.`
+      );
+    }
   }
 
   // 실제 대화 턴 수 (그리팅만 있는 첫 메시지면 0턴)
@@ -182,11 +263,14 @@ function buildDynamicHint(history, userMessage, personaId, memories = []) {
 // 메시지 구성: system + few-shot + history + (hint) + user
 // ─────────────────────────────────────────────────────────────
 
-function composeMessages(persona, personaId, history, userMessage, memories = []) {
-  const hint = buildDynamicHint(history, userMessage, personaId, memories);
+function composeMessages(persona, personaId, history, userMessage, memories = [], opts = {}) {
+  const hint = buildDynamicHint(history, userMessage, personaId, memories, opts);
+  const stateBlock = buildStateBlock(history, userMessage, memories);
 
   const messages = [
     { role: 'system', content: persona.system_prompt },
+    // state block — examples 의 schema 와 일치, EXAMPLES 와 짝 맞춰 톤 선택 유도
+    { role: 'system', content: stateBlock },
     // 그리팅 + 실제 대화 히스토리만 (few-shot 없음 — LLM이 무관한 맥락에도 베끼는 부작용 회피)
     ...history.slice(-MAX_HISTORY).filter((m) => m.role !== 'user' || m.content !== userMessage),
   ];
@@ -200,17 +284,59 @@ function composeMessages(persona, personaId, history, userMessage, memories = []
   return messages;
 }
 
+// gpt-5.1: reasoning_effort='none' + temperature 자유 (gpt-5 에서 잃었던 레버 부활)
+// gpt-5:   reasoning_effort='minimal' + temperature=1 고정
+// 그 외:   max_tokens + temperature/penalty 튜닝
+function buildChatCompletionParams(messages, model) {
+  const isGpt51 = /^gpt-5\.1/i.test(model);
+  const isGpt5 = /^gpt-5/i.test(model);
+  if (isGpt51) {
+    return {
+      model,
+      messages,
+      max_completion_tokens: 450,
+      reasoning_effort: 'none',
+      temperature: 0.7,
+    };
+  }
+  if (isGpt5) {
+    return {
+      model,
+      messages,
+      max_completion_tokens: 450,
+      reasoning_effort: 'minimal',
+    };
+  }
+  return {
+    model,
+    messages,
+    temperature: 0.9,
+    max_tokens: 400,
+    frequency_penalty: 0.2,
+    presence_penalty: 0.2,
+  };
+}
+
+const MAX_VALIDATION_ATTEMPTS = 2;
+const CLIENT_CHUNK_SIZE = 50; // 60자씩 끊어 보내 streaming 흉내 (UX 살짝)
+
 /**
- * 페르소나 대화 응답을 SSE 스트리밍으로 생성한다.
+ * 페르소나 대화 응답 생성. SSE 로 client 에 emit.
+ *
+ * 흐름:
+ *   1. 응답 생성 (full, non-stream)
+ *   2. (D) regex + (A) inline judge 검증
+ *   3. fail 이면 1회 재생성, 그래도 fail 이면 그대로 emit (사용자 무한 대기 X)
+ *   4. final 텍스트를 chunk 단위로 SSE token 으로 보냄
  */
-async function streamChat(sessionId, userMessage, res) {
+async function streamChat(sessionId, userMessage, res, opts = {}) {
+  const { autoRecommend = false } = opts;
   const session = await getSession(sessionId);
   const persona = PERSONAS[session.persona_id];
 
-  // 대화 히스토리 로드 (사용자 메시지 추가 전 상태가 hint 분석 기준)
   let history = session.conversation_history || [];
 
-  // 메모리 callback — 채팅 응답 latency 에 영향 작도록 짧게 (top 2~3)
+  // 메모리 callback — top 2~3 (latency 영향 작게)
   let memories = [];
   if (session.user_id) {
     try {
@@ -220,61 +346,64 @@ async function streamChat(sessionId, userMessage, res) {
     }
   }
 
-  const messages = composeMessages(persona, session.persona_id, history, userMessage, memories);
-
-  // history는 저장용으로 사용자 메시지 추가
+  const messages = composeMessages(
+    persona,
+    session.persona_id,
+    history,
+    userMessage,
+    memories,
+    { autoRecommend }
+  );
   history.push({ role: 'user', content: userMessage });
 
-  // SSE 헤더 설정
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
   });
 
+  const completionParams = buildChatCompletionParams(messages, LLM_MODEL);
+
   let fullResponse = '';
 
-  // gpt-5 계열은 max_completion_tokens + reasoning_effort 만 받고, temperature/penalty 는 고정값(1, 0).
-  // 그 외 모델 (gpt-4o, gpt-4.1 등) 은 기존 max_tokens + temperature/penalty 튜닝 가능.
-  const isReasoningChat = /^gpt-5/i.test(LLM_MODEL);
-  const completionParams = isReasoningChat
-    ? {
-        model: LLM_MODEL,
-        messages,
-        stream: true,
-        max_completion_tokens: 450,
-        reasoning_effort: 'minimal',
-      }
-    : {
-        model: LLM_MODEL,
-        messages,
-        stream: true,
-        temperature: 0.9,
-        max_tokens: 400,
-        frequency_penalty: 0.2,
-        presence_penalty: 0.2,
-      };
-
   try {
-    const stream = await openai.chat.completions.create(completionParams);
+    for (let attempt = 1; attempt <= MAX_VALIDATION_ATTEMPTS; attempt++) {
+      const r = await openai.chat.completions.create(completionParams);
+      const text = r.choices[0]?.message?.content?.trim() || '';
 
-    for await (const chunk of stream) {
-      const token = chunk.choices[0]?.delta?.content || '';
-      if (token) {
-        fullResponse += token;
-        res.write(`data: ${JSON.stringify({ token })}\n\n`);
+      const validation = await validateResponse({
+        text,
+        personaId: session.persona_id,
+        userMessage,
+      });
+
+      if (validation.pass) {
+        fullResponse = text;
+        if (attempt > 1) console.log(`[chat] validation pass on retry (attempt ${attempt})`);
+        break;
+      }
+
+      console.log(
+        `[chat] validation fail (attempt ${attempt}, ${validation.source}): ${validation.reason}`
+      );
+
+      if (attempt === MAX_VALIDATION_ATTEMPTS) {
+        // 마지막 시도까지 fail — 그대로 emit (사용자 대기 시간 늘리지 않음).
+        fullResponse = text;
       }
     }
 
-    // 히스토리에 응답 추가
-    history.push({ role: 'assistant', content: fullResponse });
+    // chunk 단위 SSE emit — client 의 token-by-token UI 와 호환
+    for (let i = 0; i < fullResponse.length; i += CLIENT_CHUNK_SIZE) {
+      const chunk = fullResponse.slice(i, i + CLIENT_CHUNK_SIZE);
+      res.write(`data: ${JSON.stringify({ token: chunk })}\n\n`);
+    }
 
-    // 히스토리 크기 제한
+    history.push({ role: 'assistant', content: fullResponse });
     if (history.length > MAX_HISTORY) {
       history = history.slice(-MAX_HISTORY);
     }
 
-    // 메시지 카운트 증가 + 5턴 시점 타이틀 자동 생성 (feature/SessionSave)
     const newMessageCount = (session.message_count || 0) + 1;
     const updateData = {
       conversation_history: history,

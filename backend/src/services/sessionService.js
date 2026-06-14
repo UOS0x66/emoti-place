@@ -42,27 +42,37 @@ ${memoryText}
 그리팅 한 줄(또는 2문장) 만 출력. 다른 설명·따옴표 X.`;
 
   const model = process.env.CHAT_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini';
+  const isGpt51 = /^gpt-5\.1/i.test(model);
   const isGpt5 = /^gpt-5/i.test(model);
 
-  const params = isGpt5
-    ? {
-        model,
-        messages: [
-          { role: 'system', content: persona.system_prompt },
-          { role: 'user', content: taskPrompt },
-        ],
-        max_completion_tokens: 250,
-        reasoning_effort: 'minimal',
-      }
-    : {
-        model,
-        temperature: 0.7,
-        max_tokens: 150,
-        messages: [
-          { role: 'system', content: persona.system_prompt },
-          { role: 'user', content: taskPrompt },
-        ],
-      };
+  const baseMessages = [
+    { role: 'system', content: persona.system_prompt },
+    { role: 'user', content: taskPrompt },
+  ];
+  let params;
+  if (isGpt51) {
+    params = {
+      model,
+      messages: baseMessages,
+      max_completion_tokens: 250,
+      reasoning_effort: 'none',
+      temperature: 0.7,
+    };
+  } else if (isGpt5) {
+    params = {
+      model,
+      messages: baseMessages,
+      max_completion_tokens: 250,
+      reasoning_effort: 'minimal',
+    };
+  } else {
+    params = {
+      model,
+      temperature: 0.7,
+      max_tokens: 150,
+      messages: baseMessages,
+    };
+  }
 
   try {
     const res = await openai.chat.completions.create(params);

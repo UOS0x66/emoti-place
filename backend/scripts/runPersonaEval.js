@@ -26,6 +26,15 @@ import { fileURLToPath } from 'node:url';
 import openai from '../src/config/openai.js';
 import PERSONAS from '../src/prompts/personas.js';
 import { composeMessages } from '../src/services/chatService.js';
+import {
+  detectManualWarmth,
+  detectClosingQuestion,
+  detectNumberedList,
+  detectBulletList,
+  detectManualPattern,
+  detectPersonaLeak,
+  detectVerbatimCopy,
+} from '../src/utils/responseDetectors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -33,90 +42,7 @@ const ROOT = path.resolve(__dirname, '..');
 const CHAT_MODEL = process.env.CHAT_MODEL || process.env.LLM_MODEL || 'gpt-5';
 const JUDGE_MODEL = process.env.JUDGE_MODEL || 'gpt-4o-mini';
 
-// 매뉴얼식 위로/공감 패턴 — SHARED_CORE 에서 금지한 문구들
-const MANUAL_WARMTH_PATTERNS = [
-  '힘드시겠', '이해합니다', '그러셨군요', '마음이 아프', '많이 속상',
-  '많이 힘드', '도움이 되', '한 상태시군', '마음이 무거', '많이 지치셨',
-];
-
-// 클로저 질문 패턴 — 응답 끝의 안전모드 질문 클로저
-const CLOSING_PATTERNS_END = [
-  /더\s*(이야기|말씀|얘기)/, /말씀해\s*(주|보)/, /알려주\s*[실세]/,
-  /들려주\s*[실세]/, /어떤\s*일/, /왜\s*그/, /뭐가\s*그/, /어땠/,
-];
-
-// 매뉴얼·체크리스트 양식 — 컨설팅 모드 회귀 징후
-const MANUAL_PATTERNS = [
-  '아래와 같이', '다음과 같', '아래의', '다음의', '식으로 정리',
-  '체크리스트', '단계 나눠', '단계별로', '순서대로', '리스트업',
-];
-
-// 다른 페르소나의 시그니처 마커 — 페르소나 누출 감지용
-// (각 페르소나 본인의 호칭·어미는 제외하고, 다른 페르소나에서 명백히 새어들어왔다고 볼 수 있는 토큰만)
-const FOREIGN_PERSONA_MARKERS = {
-  // 조폭(1) 응답에 나타나면 안 되는 것
-  1: {
-    2: ['본 시스템', '*수신 확인', '*입력 처리', '*분석 중', '*감지', '권한 외', '미보유', '*응답 톤'],
-    3: ['아가', '할미', '시방', '~겨', '~혀', '그라믄', '있으믄'],
-  },
-  // 로봇(2) 응답에 나타나면 안 되는 것
-  2: {
-    1: ['행님', '예 행님', '에헤이 행님', '오메'],
-    3: ['아가', '할미', '시방', '그라믄', '있으믄'],
-  },
-  // 할미(3) 응답에 나타나면 안 되는 것
-  3: {
-    1: ['행님', '예 행님', '에헤이 행님', '오메'],
-    2: ['본 시스템', '*수신 확인', '*입력 처리', '*분석 중', '*감지'],
-  },
-};
-
-function detectManualWarmth(text) {
-  return MANUAL_WARMTH_PATTERNS.find((p) => (text || '').includes(p)) || null;
-}
-
-function detectClosingQuestion(text) {
-  const t = (text || '').trim();
-  if (!t) return null;
-  // 응답이 ? 로 끝남
-  if (/[?？]\s*$/.test(t)) return 'ends_with_question';
-  // 마지막 한 줄(또는 마지막 60자) 안에 후속 정보 요청 패턴
-  const tail = t.slice(-60);
-  for (const p of CLOSING_PATTERNS_END) {
-    if (p.test(tail)) return p.toString();
-  }
-  return null;
-}
-
-// 번호 리스트 — "1) ... 2) ...", "1. ... 2. ..." 형태
-function detectNumberedList(text) {
-  // 한 응답 안에 "1)" 와 "2)" 또는 "1." 와 "2." 가 모두 나오면 번호 리스트로 본다
-  const t = text || '';
-  const hasOne = /(?:^|\n|\s)1[\.)]\s/.test(t);
-  const hasTwo = /(?:^|\n|\s)2[\.)]\s/.test(t);
-  return hasOne && hasTwo;
-}
-
-// 불릿 — 줄 시작에 "- " / "• " / "· " 가 2회 이상
-function detectBulletList(text) {
-  const matches = (text || '').match(/(?:^|\n)\s*[-•·]\s+/g);
-  return matches != null && matches.length >= 2;
-}
-
-// 매뉴얼 양식 — 컨설팅·매뉴얼 작성 모드 회귀 징후
-function detectManualPattern(text) {
-  return MANUAL_PATTERNS.find((p) => (text || '').includes(p)) || null;
-}
-
-// 페르소나 누출 — 응답에 다른 페르소나의 마커가 박혔는가
-function detectPersonaLeak(text, personaId) {
-  const foreigns = FOREIGN_PERSONA_MARKERS[personaId] || {};
-  for (const [otherId, markers] of Object.entries(foreigns)) {
-    const found = markers.find((m) => (text || '').includes(m));
-    if (found) return `persona${otherId}:${found}`;
-  }
-  return null;
-}
+// 회귀 검출기는 backend/src/utils/responseDetectors.js 의 import 로 일원화됨.
 
 const JUDGE_SCHEMA = {
   type: 'object',
@@ -149,24 +75,63 @@ const JUDGE_SCHEMA = {
 async function generatePersonaResponse(personaId, history, userMessage) {
   const persona = PERSONAS[personaId];
   const messages = composeMessages(persona, personaId, history, userMessage);
+  const isGpt51 = /^gpt-5\.1/i.test(CHAT_MODEL);
   const isGpt5 = /^gpt-5/i.test(CHAT_MODEL);
-  const params = isGpt5
-    ? {
-        model: CHAT_MODEL,
-        messages,
-        max_completion_tokens: 450,
-        reasoning_effort: 'minimal',
-      }
-    : {
-        model: CHAT_MODEL,
-        messages,
-        temperature: 0.9,
-        max_tokens: 400,
-        frequency_penalty: 0.2,
-        presence_penalty: 0.2,
-      };
+  let params;
+  if (isGpt51) {
+    params = {
+      model: CHAT_MODEL,
+      messages,
+      max_completion_tokens: 450,
+      reasoning_effort: 'none',
+      temperature: 0.7,
+    };
+  } else if (isGpt5) {
+    params = {
+      model: CHAT_MODEL,
+      messages,
+      max_completion_tokens: 450,
+      reasoning_effort: 'minimal',
+    };
+  } else {
+    params = {
+      model: CHAT_MODEL,
+      messages,
+      temperature: 0.9,
+      max_tokens: 400,
+      frequency_penalty: 0.2,
+      presence_penalty: 0.2,
+    };
+  }
   const r = await openai.chat.completions.create(params);
   return r.choices[0]?.message?.content?.trim() || '';
+}
+
+function buildJudgeParams(messages) {
+  const isGpt5Family = /^gpt-5/i.test(JUDGE_MODEL);
+  // gpt-5/gpt-5.1: reasoning_effort='none' 이면 temperature 풀려서 일관 채점용 0.2 사용 가능.
+  // 그 외 모델 (gpt-4o-mini 등): 그냥 temperature 0.2.
+  if (isGpt5Family) {
+    return {
+      model: JUDGE_MODEL,
+      reasoning_effort: 'none',
+      temperature: 0.2,
+      messages,
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'persona_judgement', schema: JUDGE_SCHEMA, strict: true },
+      },
+    };
+  }
+  return {
+    model: JUDGE_MODEL,
+    temperature: 0.2,
+    messages,
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'persona_judgement', schema: JUDGE_SCHEMA, strict: true },
+    },
+  };
 }
 
 async function judgeResponse({ personaName, scenario, history, userMessage, response }) {
@@ -201,18 +166,12 @@ ${response}
 
 위 응답을 JSON 으로 채점하라.`;
 
-  const r = await openai.chat.completions.create({
-    model: JUDGE_MODEL,
-    temperature: 0.2,
-    messages: [
+  const r = await openai.chat.completions.create(
+    buildJudgeParams([
       { role: 'system', content: judgeSystem },
       { role: 'user', content: judgeUser },
-    ],
-    response_format: {
-      type: 'json_schema',
-      json_schema: { name: 'persona_judgement', schema: JUDGE_SCHEMA, strict: true },
-    },
-  });
+    ])
+  );
   return JSON.parse(r.choices[0].message.content);
 }
 
@@ -233,6 +192,7 @@ function summarize(allTurns) {
     bullet_list_hits: allTurns.filter((t) => t.metrics.bullet_list).length,
     manual_pattern_hits: allTurns.filter((t) => t.metrics.manual_pattern).length,
     persona_leak_hits: allTurns.filter((t) => t.metrics.persona_leak).length,
+    verbatim_copy_hits: allTurns.filter((t) => t.metrics.verbatim_copy).length,
   };
 }
 
@@ -276,6 +236,7 @@ async function main() {
       const bulletList = detectBulletList(response);
       const manualPattern = detectManualPattern(response);
       const personaLeak = detectPersonaLeak(response, conv.persona_id);
+      const verbatimCopy = detectVerbatimCopy(response, conv.persona_id);
 
       try {
         judgement = await judgeResponse({
@@ -297,6 +258,7 @@ async function main() {
       if (bulletList) tags.push('BULLETS');
       if (manualPattern) tags.push(`MANUAL:${manualPattern}`);
       if (personaLeak) tags.push(`LEAK:${personaLeak}`);
+      if (verbatimCopy) tags.push(`VERBATIM:${verbatimCopy}`);
       if (judgement) {
         tags.push(
           `drip=${judgement.drip_present ? judgement.drip_quality : 'X'}`,
@@ -320,6 +282,7 @@ async function main() {
           bullet_list: bulletList,
           manual_pattern: manualPattern,
           persona_leak: personaLeak,
+          verbatim_copy: verbatimCopy,
         },
         judgement,
       });

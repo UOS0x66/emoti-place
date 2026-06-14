@@ -62,21 +62,12 @@ class _ChatScreenState extends State<ChatScreen> {
   // place_id → 보관함 저장 여부. 같은 이유로 화면 state 에 둔다.
   final Set<int> _savedPlaceIds = {};
 
-  /// 자동 추천 1회 정책: 사용자 메시지 5턴 도달 시 자동 트리거.
-  /// 단, 사용자가 그 전에 위치 아이콘을 눌렀거나 자동 트리거가 한 번 발생한 뒤에는
-  /// 다시 자동으로 띄우지 않는다.
-  bool _autoRecommendTriggered = false;
+  /// 자동 추천 정책: 추천 받은 시점 이후 user 메시지 5턴 더 쌓이면 자동 트리거.
+  /// _autoRecommendBaseUserCount = 마지막 추천 시점의 user 메시지 카운트 (baseline).
+  /// 다음 트리거 조건: (현재 user 카운트 - baseline) >= threshold.
+  /// 추천을 받을 때마다 baseline 갱신 → 5턴 윈도우가 매 추천마다 재시작.
+  int _autoRecommendBaseUserCount = 0;
   static const int _autoRecommendThreshold = 5;
-
-  String _autoRecommendIntro() {
-    if (_persona.name.contains('조폭')) {
-      return '행님, 얘기 들어보고 좋은 데 몇 곳 추려봤습니다. 한번 보십쇼.';
-    } else if (_persona.name.contains('로봇')) {
-      return '감정 데이터 누적 충분, 적합 장소 추천 출력 개시.';
-    } else {
-      return '아가, 듣고보니 할미가 좋은 데 몇 군데 알어. 한번 가봐.';
-    }
-  }
 
   /// 3km 안에 추천할 장소가 없을 때 페르소나 톤으로 알려주는 멘트.
   String _tooFarMessage() {
@@ -87,15 +78,6 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       return '아이고 아가, 시방 너 있는 데 근처에는 할미가 아는 곳이 없네. 좀 떨어진 동네 가서 다시 한번 봐줘봐라.';
     }
-  }
-
-  Future<void> _maybeAutoRecommend() async {
-    if (_autoRecommendTriggered) return;
-    final userTurnCount = _messages.where((m) => m.isUser).length;
-    if (userTurnCount < _autoRecommendThreshold) return;
-    _autoRecommendTriggered = true;
-    _addPersonaMessage(_autoRecommendIntro());
-    await _requestRecommendation();
   }
 
   /// 현재 페르소나로 새 세션을 생성한 뒤 화면을 초기 상태로 리셋한다.
@@ -111,7 +93,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _personalization = Personalization.empty;
         _placeRatings.clear();
         _savedPlaceIds.clear();
-        _autoRecommendTriggered = false;
+        _autoRecommendBaseUserCount = 0;
         _messages.add(_ChatMessage(text: session.greetingMessage, isUser: false));
       });
       _scrollToBottom();
@@ -177,14 +159,13 @@ class _ChatScreenState extends State<ChatScreen> {
         _personalization = Personalization.empty;
         _placeRatings.clear();
         _savedPlaceIds.clear();
-        // 이미 어느 정도 대화가 쌓인 세션이면 자동 추천을 다시 띄우지 않는다.
-        _autoRecommendTriggered =
-            _messages.where((m) => m.isUser).length >= _autoRecommendThreshold;
+        // 세션 resume 시 baseline = 현재 user 메시지 카운트.
+        // 기존 누적 턴은 다음 자동 추천을 트리거하지 않고, 앞으로 5턴 더 쌓여야 트리거.
+        _autoRecommendBaseUserCount = _messages.where((m) => m.isUser).length;
 
-        // 추천 카드 복원: 인트로 → 카드들 → refresh 트리거 순으로 끝에 붙임.
-        // 원본 인트로는 DB 에 안 남으므로 페르소나 멘트로 재구성.
+        // 추천 카드 복원: 추천 인트로는 5턴 응답에 이미 자연스럽게 박혀 있으므로
+        // (auto_recommend hint 로 backend 가 merged 출력) 별도 멘트 없이 카드만 붙인다.
         if (resumedPlaces.isNotEmpty) {
-          _messages.add(_ChatMessage(text: _autoRecommendIntro(), isUser: false));
           for (final place in resumedPlaces) {
             _messages.add(_ChatMessage(text: '', isUser: false, place: place));
           }
@@ -216,14 +197,33 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _requestRecommendation({bool refresh = false}) async {
     if (_recommending) return;
-    // 사용자가 명시적으로 추천을 받은 시점에도 자동 트리거 비활성화.
-    _autoRecommendTriggered = true;
+    // 추천 받은 시점부터 다음 자동 추천 윈도우를 새로 시작 — baseline 을 현재 카운트로.
+    _autoRecommendBaseUserCount = _messages.where((m) => m.isUser).length;
     setState(() => _recommending = true);
 
     try {
-      final position = await Geolocator.getCurrentPosition(
+      // (1) 권한 가드 — denied 면 한 번 요청, deniedForever 면 즉시 폴백.
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        throw Exception('위치 권한이 필요합니다. 설정에서 허용해주세요.');
+      }
+
+      // (2) 위치 획득 — 마지막 캐시 위치 우선 (즉시 반환, GPS fix 불필요).
+      //     캐시 없으면 medium 정확도 + 15초 timeout 으로 새 fix 시도.
+      Position? position;
+      try {
+        position = await Geolocator.getLastKnownPosition();
+      } catch (_) {
+        position = null;
+      }
+      position ??= await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 15),
         ),
       );
 
@@ -290,6 +290,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    // 사용자 메시지를 추가하면 user turn 카운트가 1 증가하는 순간을 미리 계산해서,
+    // 이번 턴이 5턴 자동 추천 트리거 턴이면 backend 에 알린다.
+    // (backend 가 응답 안에 추천 안내 한 줄을 자연스럽게 박는다.)
+    // baseline 차감 → 마지막 추천 이후 새로 쌓인 turn 수가 기준.
+    final nextUserTurnCount = _messages.where((m) => m.isUser).length + 1;
+    final triggersRecommend =
+        (nextUserTurnCount - _autoRecommendBaseUserCount) >= _autoRecommendThreshold;
+
     setState(() {
       _messages.add(_ChatMessage(text: text, isUser: true));
       // 빈 페르소나 메시지를 먼저 추가하고, 스트림 토큰으로 채운다
@@ -306,6 +314,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final stream = ChatService.streamMessage(
         sessionId: _sessionId,
         message: text,
+        autoRecommend: triggersRecommend,
       );
       await for (final token in stream) {
         buffer.write(token);
@@ -328,9 +337,12 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() => _sending = false);
     }
 
-    // 응답 스트림 종료 후 자동 추천 트리거 검토.
-    if (mounted) {
-      await _maybeAutoRecommend();
+    // 응답 스트림 종료 후 자동 추천 트리거.
+    // triggersRecommend == true 였으면 bot 응답에 이미 안내가 박혀있으니
+    // 별도 intro 추가 없이 곧장 추천 카드만 emit 한다.
+    // baseline 갱신은 _requestRecommendation 진입부에서 수행되므로 여기선 별도 처리 불필요.
+    if (mounted && triggersRecommend) {
+      await _requestRecommendation();
     }
   }
 

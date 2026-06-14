@@ -59,6 +59,8 @@ class _PlaceCardState extends State<PlaceCard> {
   bool _ratingBusy = false;
   bool _savedBusy = false;
   bool _descExpanded = false;
+  // 카드 전체 펼침 상태. 기본은 collapsed (사진 + 이름만). 탭 시 토글.
+  bool _cardExpanded = false;
 
   Future<void> _toggle(PlaceRating tapped) async {
     if (_ratingBusy || widget.onRatingChanged == null) return;
@@ -270,6 +272,153 @@ class _PlaceCardState extends State<PlaceCard> {
     );
   }
 
+  Widget _buildCollapsedBody() {
+    return InkWell(
+      onTap: () => setState(() => _cardExpanded = true),
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildPhotoArea(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: widget.accentColor,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.expand_more,
+                  size: 22,
+                  color: widget.accentColor.withValues(alpha: 0.7),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandedBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 사진 영역도 탭 시 접을 수 있게
+        InkWell(
+          onTap: () => setState(() => _cardExpanded = false),
+          child: _buildPhotoArea(),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 장소명 + 북마크 (헤더 탭으로 접기)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _cardExpanded = false),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildHeader()),
+                    Icon(
+                      Icons.expand_less,
+                      size: 22,
+                      color: widget.accentColor.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // 카테고리
+              _InfoRow(icon: Icons.label_outline, text: widget.category),
+              const SizedBox(height: 4),
+
+              // 주소
+              _InfoRow(icon: Icons.place_outlined, text: widget.address),
+
+              // 거리 (현재 내 위치 기준)
+              if (widget.distanceKm != null) ...[
+                const SizedBox(height: 4),
+                _InfoRow(
+                  icon: Icons.directions_walk,
+                  text: '내 위치에서 ${_formatDistance(widget.distanceKm!)}',
+                ),
+              ],
+
+              // 영업시간
+              if (widget.operatingHours != null) ...[
+                const SizedBox(height: 4),
+                _InfoRow(icon: Icons.access_time, text: widget.operatingHours!),
+              ],
+
+              // 최대 인원
+              if (widget.maxGroupSize != null) ...[
+                const SizedBox(height: 4),
+                _InfoRow(icon: Icons.group_outlined, text: '최대 ${widget.maxGroupSize}명'),
+              ],
+
+              // 실내/실외
+              const SizedBox(height: 4),
+              _InfoRow(
+                icon: widget.isOutdoor ? Icons.wb_sunny_outlined : Icons.roofing,
+                text: widget.isOutdoor ? '실외' : '실내',
+              ),
+
+              // 분위기 (1줄 + 토글로 펼치기)
+              _buildDescription(),
+
+              // 페르소나 추천 사유
+              if (widget.personaReason != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  widget.personaReason!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF999999),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+
+              // LIKE / DISLIKE 토글
+              _buildRatingRow(),
+
+              // 지도 버튼
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: widget.onMapTap,
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: const Text('지도에서 보기'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: widget.accentColor,
+                    side: BorderSide(color: widget.accentColor.withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -285,98 +434,8 @@ class _PlaceCardState extends State<PlaceCard> {
           width: 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 사진 (없거나 로드 실패 시 카테고리 아이콘 플레이스홀더)
-          _buildPhotoArea(),
-
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 장소명 + 북마크
-                _buildHeader(),
-                const SizedBox(height: 8),
-
-                // 카테고리
-                _InfoRow(icon: Icons.label_outline, text: widget.category),
-                const SizedBox(height: 4),
-
-                // 주소
-                _InfoRow(icon: Icons.place_outlined, text: widget.address),
-
-                // 거리 (현재 내 위치 기준)
-                if (widget.distanceKm != null) ...[
-                  const SizedBox(height: 4),
-                  _InfoRow(
-                    icon: Icons.directions_walk,
-                    text: '내 위치에서 ${_formatDistance(widget.distanceKm!)}',
-                  ),
-                ],
-
-                // 영업시간
-                if (widget.operatingHours != null) ...[
-                  const SizedBox(height: 4),
-                  _InfoRow(icon: Icons.access_time, text: widget.operatingHours!),
-                ],
-
-                // 최대 인원
-                if (widget.maxGroupSize != null) ...[
-                  const SizedBox(height: 4),
-                  _InfoRow(icon: Icons.group_outlined, text: '최대 ${widget.maxGroupSize}명'),
-                ],
-
-                // 실내/실외
-                const SizedBox(height: 4),
-                _InfoRow(
-                  icon: widget.isOutdoor ? Icons.wb_sunny_outlined : Icons.roofing,
-                  text: widget.isOutdoor ? '실외' : '실내',
-                ),
-
-                // 분위기 (1줄 + 토글로 펼치기)
-                _buildDescription(),
-
-                // 페르소나 추천 사유
-                if (widget.personaReason != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.personaReason!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF999999),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-
-                // LIKE / DISLIKE 토글
-                _buildRatingRow(),
-
-                // 지도 버튼
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: widget.onMapTap,
-                    icon: const Icon(Icons.map_outlined, size: 18),
-                    label: const Text('지도에서 보기'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: widget.accentColor,
-                      side: BorderSide(color: widget.accentColor.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: _cardExpanded ? _buildExpandedBody() : _buildCollapsedBody(),
     );
   }
 }
